@@ -1,0 +1,2 @@
+import test from 'node:test';import assert from 'node:assert/strict';import {visibleSchedule,canEditPlayer} from '../server/policy.js';
+test('server policy denies anonymous requests and excludes future records',()=>{const a=[{revealAt:'2026-11-01T12:00:00+09:00',destination:'secret'}];assert.throws(()=>visibleSchedule(a,null));assert.deepEqual(visibleSchedule(a,{role:'groom'},0),[]);assert.equal(visibleSchedule(a,{role:'bride'},0).length,1);assert.equal(canEditPlayer({role:'groom'},'bride'),false);});
