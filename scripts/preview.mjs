@@ -9,7 +9,7 @@ let js=parts.join('\n');
 for(const name of ['character_hanamuko_gray_black.png','character_hanayome_01_black.png']){
  const path=`./assets/characters/${name}`;
  try{const bytes=await readFile(path);js=js.split(path).join(`data:image/png;base64,${bytes.toString('base64')}`);}
- catch(e){if(e.code!=='ENOENT')throw e;js=js.split(path).join('data:image/png;base64,');console.log(`PNG未受領: ${name}`);}
+ catch(e){if(e.code!=='ENOENT')throw e;js=js.split(path).join('data:image/png;base64,');console.log(`元PNG未配置: ${name}`);}
 }
 
 let html=await readFile('index.html','utf8');

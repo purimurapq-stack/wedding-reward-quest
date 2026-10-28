@@ -1,5 +1,6 @@
 // Static transparent PNGs. A text fallback is shown only on an image load error.
 export const characterAssets={groom:'./assets/characters/character_hanamuko_gray_black.png',bride:'./assets/characters/character_hanayome_01_black.png'};
+export function configureCharacters(images={}){characterAssets.groom=images.groom||'./assets/characters/character_hanamuko_gray_black.png';characterAssets.bride=images.bride||'./assets/characters/character_hanayome_01_black.png';}
 export function sprite(role){const label=role==='bride'?'新婦':'新郎';return `<span class="character sprite ${role}"><img data-character="${role}" src="${characterAssets[role]}" alt="${label}" decoding="async"><span class="character-fallback" hidden>${label}<small>画像を読み込めません</small></span></span>`;}
 export const pair=()=>`<div class="couple">${sprite('groom')}<span class="heart">♥</span>${sprite('bride')}</div>`;
 export function landscape(){return `<div class="landscape"><span class="sun"></span><span class="cloud c1"></span><span class="cloud c2"></span><div class="mount m1"></div><div class="mount m2"></div><div class="mount m3"></div><div class="castle">▥<br>▦ ▦<br>▥</div><div class="trail"></div><span class="tree t1">♠</span><span class="tree t2">♠</span><span class="flowers">✿ · ✿</span>${pair()}<span class="spark s1">✦</span><span class="spark s2">✦</span></div>`;}

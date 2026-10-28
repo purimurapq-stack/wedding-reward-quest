@@ -1,15 +1,15 @@
 import test from 'node:test';import assert from 'node:assert/strict';
 import {fresh,applyEvent,setCurrent,unlocked,tripDay,tokyoDate,nextAction,actionText,clearQuest,questState,notifications,migrate,actionNote,maskText,editPlan} from '../src/domain.js';
-import {quests,actions,recoveryEvents,statusPrompts,configureSchedule} from '../src/data.js';
+import {quests,actions,recoveryEvents,statusPrompts,configureSchedule,eventEffect,openingTiming} from '../src/data.js';
 const time=s=>Date.parse(s+'+09:00');
 test('scheduled independent events, shared growth, clamping and duplicate idempotency',()=>{
  let s=fresh();const event=recoveryEvents.find(e=>e.id==='d1-bath'),t=Date.parse(event.availableAt);
  assert.deepEqual(applyEvent(s,event.id,t-1),s);
- s=applyEvent(s,event.id,t);assert.deepEqual(s.players.bride.hp,[50,110]);assert.deepEqual(s.players.groom.hp,[60,110]);assert.deepEqual(applyEvent(s,event.id,t),s);
- s=applyEvent(s,'d2-bath',time('2026-11-01T21:00:00'));assert.equal(s.players.bride.hp[1],120);
+ s=applyEvent(s,event.id,t);assert.deepEqual(s.players.bride.hp,[100,130]);assert.deepEqual(s.players.groom.hp,[110,130]);assert.deepEqual(applyEvent(s,event.id,t),s);
+ s=applyEvent(s,'d2-bath',time('2026-11-01T21:00:00'));assert.equal(s.players.bride.hp[1],230);
  for(const id of ['d1-meal','d2-snack','d2-meal'])s=applyEvent(s,id,time('2026-11-02T21:00:00'));
  assert.equal(s.players.bride.hunger[0],0);assert.equal(s.done.length,5);
- s=applyEvent(s,'d2-view',time('2026-11-02T21:00:00'));assert.equal(s.players.bride.joy[0],100);
+ s=applyEvent(s,'d2-view',time('2026-11-02T21:00:00'));assert.equal(s.players.bride.joy[0],s.players.bride.joy[1]);
 });
 test('night entries only change selected player and retain date-specific records',()=>{
  const s=fresh();const n=setCurrent(s,'groom',{hp:999,mp:-4},'2026-10-31');assert.deepEqual(n.players.groom.hp,[100,100]);assert.equal(n.players.groom.mp[0],0);assert.deepEqual(n.players.bride,s.players.bride);assert.ok(n.logs['2026-10-31:groom']);assert.throws(()=>setCurrent(s,'groom',{hp:NaN},''));
@@ -63,3 +63,20 @@ test('all future place names and private notes are consistently masked; first vi
  assert.equal(maskText('清泉寮','groom',time('2026-11-01T13:18:00')),'清泉寮');
  const deadline=actions.find(a=>a.id==='a2-return-ready');assert.equal(deadline.time,'15:50');assert.equal(actions.find(a=>a.id==='a2-13').time,'16:04');
 });
+
+test('growth ramps from early to late and reaches HP580/MP505 with a complete trip',()=>{
+ const early=eventEffect(recoveryEvents.find(e=>e.id==='d1-rest'));
+ const middle=eventEffect(recoveryEvents.find(e=>e.id==='d2-bath'));
+ const late=eventEffect(recoveryEvents.find(e=>e.id==='d2-sleep'));
+ assert.equal(early.max.hp,25);assert.equal(middle.max.hp,100);assert.equal(late.max.hp,150);assert.equal(late.max.mp,100);
+ let s=fresh();for(const event of recoveryEvents)s=applyEvent(s,event.id,Date.parse('2026-11-03T00:00:00+09:00'));
+ for(const role of ['groom','bride']){assert.equal(s.players[role].hp[1],580);assert.equal(s.players[role].mp[1],505);assert.equal(s.players[role].joy[1],410);for(const [current,max] of Object.values(s.players[role]))assert.ok(current>=0&&current<=max);}
+ assert.equal(Object.keys(s.rewardHistory).length,recoveryEvents.length);
+});
+test('legacy saves preserve every value and completed event without retroactive growth',()=>{
+ const old={...fresh(),players:{groom:{hp:[60,110],mp:[30,80],hunger:[10,100],joy:[100,100]},bride:{hp:[50,110],mp:[20,80],hunger:[10,100],joy:[100,100]}},done:['d1-bath'],items:[1,3],seen:true,ack:['groom:quest:q1-0'],plan:{bus:'late'},logs:{'2026-10-31:groom':{hp:60}},questClears:{'q1-0':'2026-10-31T15:00:00Z'}};
+ const migrated=migrate(JSON.parse(JSON.stringify(old)));assert.deepEqual(migrated,old);
+ assert.deepEqual(applyEvent(migrated,'d1-bath',Date.parse('2026-11-03T00:00:00+09:00')),old);
+ const next=applyEvent(migrated,'d2-sleep',Date.parse('2026-11-03T00:00:00+09:00'));assert.equal(next.players.groom.hp[1],260);assert.equal(next.players.groom.mp[1],180);assert.deepEqual(next.items,old.items);assert.deepEqual(next.logs,old.logs);assert.deepEqual(next.questClears,old.questClears);
+});
+test('opening scene boundaries are 8/17/22 seconds',()=>{assert.deepEqual(openingTiming,{homecoming:8000,unlock:17000,end:22000});});

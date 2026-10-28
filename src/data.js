@@ -46,3 +46,20 @@ export const locations=[
  {names:['清里駅'],actionId:'a2-1'},{names:['サンメドウズ清里','清里テラス','サンダンス','センターハウス'],actionId:'a2-3'},
  {names:['清泉寮'],actionId:'a2-6'},{names:['まきば公園'],actionId:'a2-11'}
 ];
+// Per-instance rewards: early recovery -> middle growth -> late breakthrough.
+export const growthRewards={
+ 'd1-rest':{max:{hp:25,mp:25},current:{hp:20,mp:50}},
+ 'd1-meal':{max:{hp:25,joy:30},current:{hp:35,hunger:-40,joy:30}},
+ 'd1-bath':{max:{hp:30},current:{hp:70,mp:20}},
+ 'd1-sleep':{max:{hp:50,mp:40},current:{hp:100,mp:80}},
+ 'd2-view':{max:{mp:80,joy:60},current:{mp:90,joy:60}},
+ 'd2-snack':{max:{hp:25,joy:40},current:{hp:40,hunger:-35,joy:40}},
+ 'd2-rest':{max:{mp:60},current:{mp:120}},
+ 'd2-meal':{max:{hp:50,joy:60},current:{hp:80,hunger:-50,joy:60}},
+ 'd2-bath':{max:{hp:100,mp:20},current:{hp:180,mp:50}},
+ 'd2-sleep':{max:{hp:150,mp:100},current:{hp:250,mp:180}},
+ 'd3-meal':{max:{hp:25,joy:80},current:{hp:60,hunger:-50,joy:80}},
+ 'd3-rest':{max:{mp:100,joy:40},current:{mp:200,joy:40}}
+};
+export function eventEffect(event){return {...effects.find(e=>e.id===event.effect),...growthRewards[event.id]};}
+export const openingTiming={homecoming:8000,unlock:17000,end:22000};

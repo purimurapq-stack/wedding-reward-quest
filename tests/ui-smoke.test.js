@@ -1,21 +1,22 @@
 // Minimal DOM harness. Browser rendering and real-device tests remain separate.
 import test from 'node:test';import assert from 'node:assert/strict';import vm from 'node:vm';import {readFileSync} from 'node:fs';import {fresh} from '../src/domain.js';
-function harness(){
- const listeners={},timers=[];let html='',modal='',writes=0,fail=false,scroll=0;
- const saved=fresh();saved.seen=true;const memory=new Map([['reward-quest-v1',JSON.stringify(saved)]]);
+function harness(options={}){
+ const listeners={},timers=[],timeouts=new Map(),raf=[];let html='',modal='',writes=0,fail=false,scroll=0,timeoutId=0;const base=Date.parse('2026-10-29T00:00:00+09:00');let virtual=base;class Clock extends Date{static now(){return virtual;}}
+ const saved=fresh();saved.seen=options.seen??true;saved.motion=options.motion??true;saved.images=options.images||{};const memory=new Map([['reward-quest-v1',JSON.stringify(saved)]]);
  const clock={value:'2026-11-01T21:00'},count={textContent:''},error={hidden:true,textContent:''};
  const inputs=Array.from({length:14},(_,i)=>({dataset:{item:String(i)},checked:false,disabled:false}));
  const app={set innerHTML(v){html=v;modal='';writes++;},get innerHTML(){return html;},append(d){modal=d.innerHTML;},querySelector(){return {inert:false};}};
- const document={hidden:false,body:{classList:{toggle(){}}},querySelector(sel){if(sel==='#app')return app;if(sel==='#clock')return clock;if(sel==='#item-count')return count;if(sel==='#save-error')return error;if(sel==='#record-date')return {value:'2026-11-01'};if(sel==='#toast')return {classList:{add(){},remove(){}},textContent:''};return null;},querySelectorAll(sel){if(sel==='[data-item]')return inputs;if(sel==='dialog')return [{remove(){modal='';}}];return [];},addEventListener(name,fn){listeners[name]=fn;},createElement(){return {innerHTML:'',setAttribute(){},addEventListener(){},showModal(){}};}};
- const context=vm.createContext({document,window:{scrollY:400,addEventListener(){},scrollTo(){scroll++;}},localStorage:{getItem:k=>memory.get(k),setItem:(k,v)=>{if(fail)throw Error('quota');memory.set(k,v);}},navigator:{},matchMedia:()=>({matches:false}),Date,Intl,structuredClone,Blob,URL,FormData:function(form){return new Map(Object.entries(form.fields));},setInterval:fn=>{timers.push(fn);},setTimeout:()=>0,clearTimeout(){},console});
+ const document={hidden:false,body:{classList:{toggle(){}}},querySelector(sel){if(sel==='#app')return app;if(sel==='#clock')return clock;if(sel==='#item-count')return count;if(sel==='#save-error')return error;if(sel==='#record-date')return {value:'2026-11-01'};if(sel==='#toast')return {classList:{add(){},remove(){}},textContent:''};return null;},querySelectorAll(sel){if(sel==='[data-item]')return inputs;if(sel==='dialog')return [{remove(){modal='';}}];if(sel==='[data-growth-count]')return growthNumbers;if(sel==='[data-growth-bar]')return growthBars;return [];},addEventListener(name,fn){listeners[name]=fn;},createElement(){return {innerHTML:'',setAttribute(){},addEventListener(){},showModal(){},querySelector(){return {focus(){}};}};}};
+ const context=vm.createContext({document,window:{scrollY:400,addEventListener(){},scrollTo(){scroll++;}},localStorage:{getItem:k=>memory.get(k),setItem:(k,v)=>{if(fail)throw Error('quota');memory.set(k,v);}},navigator:{},matchMedia:()=>({matches:false}),Date:Clock,Intl,structuredClone,Blob,URL,FileReader:class{readAsDataURL(file){this.result=file.data;this.onload();}},Image:class{set src(value){this.onload();}},FormData:function(form){return new Map(Object.entries(form.fields));},setInterval:fn=>{timers.push(fn);},performance:{now:()=>virtual-base},requestAnimationFrame:fn=>{raf.push(fn);return raf.length;},setTimeout:(fn,ms)=>{timeouts.set(++timeoutId,{fn,at:virtual+ms});return timeoutId;},clearTimeout:id=>timeouts.delete(id),console});
+ const growthNumbers=[{dataset:{from:'100',to:'130'},textContent:'100'}],growthBars=[{dataset:{from:'76.923'},style:{width:'76.923%'}}];
  const source=['itinerary','data','domain','storage','visuals','app'].map(name=>readFileSync(`src/${name}.js`,'utf8').replace(/import \{[^}]*\} from '[^']+';/g,'').replace(/\bexport\s+(?=(?:const|function|class)\b)/g,'')).join('\n');vm.runInContext(source,context);
- return {html:()=>html,modal:()=>modal,clock,error,count,inputs,writes:()=>writes,scroll:()=>scroll,failSave:()=>{fail=true;},async submit(fields){await listeners.submit({target:{id:'itinerary-editor',fields},preventDefault(){}});},async check(id,checked){const input=inputs[id];input.checked=checked;await listeners.change({target:input});},async click(dataset={},id='',dismiss=false){await listeners.click({target:{closest(){return {dataset,id,hasAttribute:()=>dismiss};}},preventDefault(){}});},tick(){timers.forEach(fn=>fn());},state:()=>JSON.parse(memory.get('reward-quest-v1'))};
+ return {async chooseImage(role,data){const bytes=Buffer.from(data.split(',')[1],'base64');const input={dataset:{characterFile:role},files:[{size:bytes.length,data,arrayBuffer:async()=>bytes.buffer.slice(bytes.byteOffset,bytes.byteOffset+bytes.byteLength)}],value:'selected'};await listeners.change({target:input});},async runTo(ms){const target=base+ms;while(true){const due=[...timeouts].filter(([,t])=>t.at<=target).sort((a,b)=>a[1].at-b[1].at)[0];if(!due)break;timeouts.delete(due[0]);virtual=due[1].at;await due[1].fn();}virtual=target;},animate(ms){virtual=base+ms;const callbacks=raf.splice(0);callbacks.forEach(fn=>fn(ms));},growthNumbers,growthBars,html:()=>html,modal:()=>modal,clock,error,count,inputs,writes:()=>writes,scroll:()=>scroll,failSave:()=>{fail=true;},async submit(fields){await listeners.submit({target:{id:'itinerary-editor',fields},preventDefault(){}});},async check(id,checked){const input=inputs[id];input.checked=checked;await listeners.change({target:input});},async click(dataset={},id='',dismiss=false){await listeners.click({target:{closest(){return {dataset,id,hasAttribute:()=>dismiss};}},preventDefault(){}});},tick(){timers.forEach(fn=>fn());},state:()=>JSON.parse(memory.get('reward-quest-v1'))};
 }
 test('five screens, demo clock, notification and shared growth still work',async()=>{
  const h=harness();assert.match(h.html(),/NEXT ACTION/);for(const page of ['quest','status','item','settings']){await h.click({page});assert.match(h.html(),/メインメニュー/);}
  await h.click({},'setclock');await h.click({page:'quest'});h.tick();assert.match(h.modal(),/NEW QUEST UNLOCKED/);
  const before=h.writes();await h.click({},'',true);assert.equal(h.writes(),before);assert.equal(h.state().ack.length,1);
- await h.click({page:'status'});await h.click({event:'d1-bath'});assert.match(h.modal(),/LEVEL UP!/);assert.equal(h.state().players.bride.hp[1],110);
+ await h.click({page:'status'});await h.click({event:'d1-bath'});assert.match(h.modal(),/LEVEL UP!/);assert.equal(h.state().players.bride.hp[1],130);
 });
 test('item changes update only controls/count and never replace the screen or scroll',async()=>{
  const h=harness();await h.click({page:'item'});const writes=h.writes(),scroll=h.scroll();
@@ -38,4 +39,26 @@ test('bride editor saves real row changes and the groom display masks custom fut
 });
 test('rapid independent checks preserve all pending selections without DOM replacement',async()=>{
  const h=harness();await h.click({page:'item'});const writes=h.writes();await Promise.all([h.check(0,true),h.check(1,true),h.check(2,true)]);assert.equal(h.writes(),writes);assert.equal(h.count.textContent,'3 / 14');assert.deepEqual(h.state().items,[0,1,2]);
+});
+
+test('opening shows PNGs and petals, changes at 8/17s, and automatically saves/returns HOME at 22s',async()=>{
+ const h=harness({seen:false});assert.match(h.modal(),/MAIN QUEST CLEAR!/);assert.match(h.modal(),/character_hanayome_01_black.png/);assert.match(h.modal(),/character_hanamuko_gray_black.png/);assert.match(h.modal(),/petal/);
+ await h.runTo(7999);assert.match(h.modal(),/MAIN QUEST CLEAR!/);await h.runTo(8000);assert.match(h.modal(),/おうちへ帰還/);assert.match(h.modal(),/intro-gauge/);
+ await h.runTo(17000);assert.match(h.modal(),/NEW QUEST UNLOCKED/);await h.runTo(22000);assert.match(h.html(),/NEXT ACTION/);assert.equal(h.modal(),'');assert.equal(h.state().seen,true);
+});
+test('reduced motion keeps the same automatic duration and skip/replay preserve saves',async()=>{
+ const h=harness({seen:false,motion:false});await h.runTo(22000);assert.equal(h.modal(),'');assert.equal(h.state().seen,true);await h.click({page:'item'});await h.check(0,true);await h.click({page:'settings'});await h.click({},'replay');assert.match(h.modal(),/MAIN QUEST CLEAR!/);await h.click({},'skip');assert.match(h.html(),/NEXT ACTION/);assert.deepEqual(h.state().items,[0]);
+});
+test('growth popup counts maximums and fills gauges without changing saved rewards again',async()=>{
+ const h=harness();await h.click({page:'settings'});await h.click({},'setclock');await h.click({page:'status'});await h.click({event:'d1-bath'});assert.match(h.modal(),/最大HP/);assert.match(h.modal(),/＋30/);assert.match(h.modal(),/data-growth-count/);
+ h.animate(700);assert.ok(+h.growthNumbers[0].textContent>100);assert.ok(+h.growthNumbers[0].textContent<130);h.animate(1400);assert.equal(+h.growthNumbers[0].textContent,130);assert.equal(h.growthBars[0].style.width,'100%');assert.equal(h.state().players.bride.hp[1],130);
+});
+test('saved PNG data URLs are applied to HOME, STATUS and opening without changing originals',async()=>{
+ const groom='data:image/png;base64,AAAA',bride='data:image/png;base64,BBBB';const h=harness({images:{groom,bride}});assert.ok(h.html().includes(groom)&&h.html().includes(bride));await h.click({page:'status'});assert.ok(h.html().includes(groom)&&h.html().includes(bride));await h.click({page:'settings'});await h.click({},'replay');assert.ok(h.modal().includes(groom)&&h.modal().includes(bride));
+});
+
+test('selecting PNG files saves their exact data URLs, applies them everywhere and preserves other saves',async()=>{
+ const image='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScLbtAAAAABJRU5ErkJggg==';
+ const h=harness();await h.click({page:'item'});await h.check(2,true);await h.click({page:'settings'});await h.chooseImage('bride',image);await h.chooseImage('groom',image);
+ assert.equal(h.state().images.bride,image);assert.equal(h.state().images.groom,image);assert.deepEqual(h.state().items,[2]);await h.click({page:'home'});assert.ok(h.html().includes(image));await h.click({page:'settings'});await h.click({},'replay');assert.ok(h.modal().includes(image));
 });
