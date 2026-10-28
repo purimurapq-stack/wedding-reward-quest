@@ -1,1 +1,6 @@
-素材差し替え先。現状は src/app.js の sprite() と landscape() がインラインSVG/CSS素材を提供します。sprite() を assets/groom.svg / bride.svg の img 要素へ変更すると差し替えできます。画像には役割を示すaltを付け、2コマの場合はCSS steps()を使ってください。
+# キャラクター素材の差し替え
+`src/visuals.js` の `characterAssets.groom` / `bride` に自作画像URLを指定してください。初期値nullでは独自の低頭身ドット絵をSVGで描画します。
+
+2コマの画像を横に並べた透過スプライトシート（例：1コマ32×40、画像全体64×40）を使います。CSSの `.sheet` に1コマの表示サイズを指定、background-size:200% 100% とstepsで2コマを切り替えます。ファイルはassets配下に置けます。単体HTMLでも外部画像を使わず開きたい場合は、画像をdata URLとして設定してください。動きを減らす設定では最初のコマを表示。
+
+参考画像の受領後にキャラクターの外見を調整できます。既存ゲームの素材は含めていません。
