@@ -1,4 +1,4 @@
 import {fresh,migrate} from './domain.js';
 const KEY='reward-quest-v1';
-// Replace this adapter with an authenticated API. Never trust role or time from a client in production.
+// Device-local persistence only; role switching is a presentation preference.
 export const repository={load(){const raw=localStorage.getItem(KEY);if(!raw)return fresh();const s=migrate(JSON.parse(raw));if(s.version!==2||!s.players||!Array.isArray(s.done)||!Array.isArray(s.items)||!Array.isArray(s.ack)||!s.questClears||!s.logs)throw Error('保存データを読み込めません。バックアップをご確認ください。');for(const role of ['bride','groom'])for(const k of ['hp','mp','hunger','joy']){const a=s.players[role]?.[k];if(!Array.isArray(a)||a.length!==2||!a.every(Number.isFinite)||a[0]<0||a[1]<=0||a[0]>a[1])throw Error('保存データの形式が不正です');}return s;},save(s){localStorage.setItem(KEY,JSON.stringify(s));},async transact(fn){if(navigator.locks)return navigator.locks.request(KEY,()=>{const next=fn(this.load());this.save(next);return next;});const next=fn(this.load());this.save(next);return next;}};

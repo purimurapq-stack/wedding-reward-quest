@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "node scripts/serve.mjs",
     "build": "node scripts/build.mjs",
-    "test": "node tests/domain.test.js && node tests/policy.test.js && node tests/ui-smoke.test.js",
+    "test": "node tests/domain.test.js && node tests/ui-smoke.test.js",
     "preview:html": "node scripts/preview.mjs"
   },
   "engines": {

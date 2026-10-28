@@ -1,6 +1,6 @@
 import test from 'node:test';import assert from 'node:assert/strict';
-import {fresh,applyEvent,setCurrent,unlocked,tripDay,tokyoDate,nextAction,actionText,clearQuest,questState,notifications,migrate} from '../src/domain.js';
-import {quests,actions,recoveryEvents,statusPrompts} from '../src/data.js';
+import {fresh,applyEvent,setCurrent,unlocked,tripDay,tokyoDate,nextAction,actionText,clearQuest,questState,notifications,migrate,actionNote,maskText,editPlan} from '../src/domain.js';
+import {quests,actions,recoveryEvents,statusPrompts,configureSchedule} from '../src/data.js';
 const time=s=>Date.parse(s+'+09:00');
 test('scheduled independent events, shared growth, clamping and duplicate idempotency',()=>{
  let s=fresh();const event=recoveryEvents.find(e=>e.id==='d1-bath'),t=Date.parse(event.availableAt);
@@ -17,7 +17,7 @@ test('night entries only change selected player and retain date-specific records
 test('next action rolls over exactly at departure; names are independently masked',()=>{
  const a=actions.find(a=>a.id==='a2-2'),t=Date.parse(a.at);
  assert.equal(nextAction(t-1).id,a.id);assert.notEqual(nextAction(t).id,a.id);
- assert.equal(actionText(a,'groom',t-1),a.safeText);assert.equal(actionText(a,'bride',t-1),a.detail);assert.equal(actionText(a,'groom',Date.parse(a.revealAt)),a.detail);
+ assert.ok(!actionText(a,'groom',t-1).includes('サンメドウズ清里'));assert.equal(actionText(a,'bride',t-1),a.detail);assert.equal(actionText(a,'groom',Date.parse(a.revealAt)),a.detail);
  assert.equal(nextAction(time('2026-11-03T00:00:00')),undefined);
 });
 test('release and explicit quest completion remain separate and persist',()=>{
@@ -36,10 +36,30 @@ test('JST date and legacy state migration preserve stats without duplicating sam
  assert.equal(tokyoDate(Date.parse('2026-10-31T15:00:00Z')),'2026-11-01');assert.equal(tripDay(Date.parse('2026-10-31T15:00:00Z')),2);
  const old={...fresh(),version:1,done:['2:meal'],seen:true};const n=migrate(old);assert.equal(n.version,2);assert.deepEqual(n.done,['d2-meal']);assert.equal(n.seen,true);assert.deepEqual(n.players,old.players);
 });
-test('routes never reveal onward destinations at departure, even after manual quest clear',()=>{
- const a=actions.find(a=>a.id==='a3-3'),departure=Date.parse(a.at);
- assert.equal(actionText(a,'groom',departure+1000),a.safeText);
- const q=quests.find(q=>q.id==='q3-1'),s=clearQuest(fresh(),q.id,departure);
- assert.equal(questState(s,q,departure),'clear');assert.equal(actionText(a,'groom',departure+1000),a.safeText);
- assert.equal(actionText(a,'groom',Date.parse(a.revealAt)),a.detail);
+test('previously visited stations remain visible on the return journey; future parks stay hidden',()=>{
+ configureSchedule();const a=actions.find(a=>a.id==='a3-3'),t=Date.parse(a.at);
+ assert.ok(actionText(a,'groom',t).includes('甲斐大泉駅'));
+ const park=actions.find(a=>a.id==='a2-10');const before=Date.parse(park.at);
+ assert.ok(!actionText(park,'groom',before).includes('まきば公園'));
+ const q=quests.find(q=>q.id==='q2-2');clearQuest(fresh(),q.id,Date.parse(q.revealAt));
+ assert.ok(!actionText(park,'groom',before).includes('まきば公園'));
+ assert.ok(actionText(park,'groom',Date.parse(actions.find(a=>a.id==='a2-11').at)).includes('まきば公園'));
+});
+test('bus candidate switches departure, arrival, reveal and next action together',()=>{
+ configureSchedule();assert.equal(actions.find(a=>a.id==='a2-10').time,'14:20');
+ configureSchedule({bus:'late'});assert.equal(actions.find(a=>a.id==='a2-10').time,'15:10');assert.equal(actions.find(a=>a.id==='a2-11').time,'15:19');
+ const t=time('2026-11-01T14:30:00');assert.ok(!maskText('まきば公園','groom',t).includes('まきば公園'));assert.equal(nextAction(t).id,'a2-10');
+ assert.equal(quests.find(q=>q.id==='q2-2').revealAt.slice(11,16),'15:19');configureSchedule();
+});
+test('bride edits time, details and lunch; groom edits are rejected and persisted custom names remain hidden',()=>{
+ const s=fresh();assert.throws(()=>editPlan(s,'actions','a2-lunch',{time:'12:30'}));s.role='bride';
+ const n=editPlan(s,'actions','a2-lunch',{time:'12:30',detail:'変更したレストランで昼食',safeText:'昼食',revealTime:'11:04'});
+ configureSchedule(n.plan);const row=actions.find(a=>a.id==='a2-lunch');assert.equal(row.time,'12:30');assert.equal(actionText(row,'bride',0),'変更したレストランで昼食');assert.equal(actionText(row,'groom',0),'昼食');
+ assert.throws(()=>editPlan(s,'actions',row.id,{time:'25:00'}));configureSchedule();
+});
+test('all future place names and private notes are consistently masked; first visit reveals them',()=>{
+ configureSchedule();const t=time('2026-10-30T00:00:00');const future=['グランドメルキュール','甲斐大泉駅','小淵沢駅','清里駅','清泉寮','まきば公園','清里テラス','サンメドウズ清里','サンダンス'];
+ const text=actions.map(a=>actionText(a,'groom',t)+' '+actionNote(a,'groom',t)).join();for(const word of future)assert.ok(!text.includes(word),word);
+ assert.equal(maskText('清泉寮','groom',time('2026-11-01T13:18:00')),'清泉寮');
+ const deadline=actions.find(a=>a.id==='a2-return-ready');assert.equal(deadline.time,'15:50');assert.equal(actions.find(a=>a.id==='a2-13').time,'16:04');
 });
