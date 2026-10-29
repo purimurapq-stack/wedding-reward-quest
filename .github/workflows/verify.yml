@@ -15,13 +15,13 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: '22'
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
         with:
           distribution: temurin
           java-version: '21'
@@ -48,7 +48,7 @@ jobs:
         env:
           RULES_TESTED: 'true'
       - name: Upload tested release
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: firebase-release-${{ github.sha }}
           path: work/firebase-release/
@@ -62,6 +62,7 @@ jobs:
             echo '- 通常テスト・本番Rulesのコンパイル/アクセス検証・Emulator正常/異常系・ビルドに成功しました。'
             echo "- 検証実行番号: $GITHUB_RUN_ID"
             echo "- コミットSHA: $GITHUB_SHA"
+            echo "- 承認欄に貼る文字列: DEPLOY $GITHUB_SHA"
             echo '- mainのpush/手動検証だけが公開候補です。PR成果物は公開できません。'
             echo '- 公開する場合は手動のApprove and deploy Firebaseを開き、上記番号とSHAを指定します。'
             echo '- Rules適用は別の承認欄が必要です。生成RulesはArtifactsから確認できます。'
