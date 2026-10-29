@@ -13,7 +13,7 @@ export function buildRules(users=allowedUsers){
    const base=`before.players.${role}.${key}`;
    return [key,`[clamp(${base}[0] + (${recovery}), ${base}[1] + ${max}), ${base}[1] + ${max}]`];
   }))]));
-  const expected='{'+Object.entries(players).map(([role,stats])=>`${role}:{`+Object.entries(stats).map(([key,value])=>`${key}:${value}`).join(',')+'}').join(',')+'}';
+  const expected='{'+Object.entries(players).map(([role,stats])=>`${literal(role)}:{`+Object.entries(stats).map(([key,value])=>`${literal(key)}:${value}`).join(',')+'}').join(',')+'}';
   return `id == '${e.id}' ? (request.time >= ${ruleTime(e.availableAt)} && after.players == ${expected}) :`;
  }).join('\n        ');
  const integerBounds=['groom','bride'].flatMap(role=>keys.map(key=>`p.${role}.${key}[0] is int && p.${role}.${key}[1] is int && p.${role}.${key}[1] > 0 && p.${role}.${key}[1] <= 10000`)).join('\n        && ');
