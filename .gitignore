@@ -4,3 +4,6 @@ dist/
 private/*
 !private/README.md
 work/
+.firebase/
+*-debug.log
+gha-creds-*.json

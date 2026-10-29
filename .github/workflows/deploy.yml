@@ -1,0 +1,133 @@
+name: Approve and deploy Firebase
+on:
+  workflow_dispatch:
+    inputs:
+      verification_run_id:
+        description: 成功したmain検証の実行番号
+        required: true
+        type: string
+      commit_sha:
+        description: その検証の完全な40文字コミットSHA
+        required: true
+        type: string
+      scope:
+        description: 公開範囲（Rulesは別承認が必要）
+        required: true
+        type: choice
+        default: hosting-only
+        options: [hosting-only, hosting-and-rules]
+      approval:
+        description: 承認する場合だけ「DEPLOY 半角空白に続けてコミットSHA」を入力
+        required: true
+        type: string
+      rules_approval:
+        description: Rulesも適用する場合だけ APPLY VERIFIED RULES と入力
+        required: false
+        type: string
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: firebase-production
+  cancel-in-progress: false
+jobs:
+  gate:
+    name: Verify explicit approval and CI result
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      sha: ${{ steps.approval.outputs.sha }}
+      run-id: ${{ steps.approval.outputs.run-id }}
+      scope: ${{ steps.approval.outputs.scope }}
+      artifact: ${{ steps.approval.outputs.artifact }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Check approval, exact commit and completed tests
+        id: approval
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { pathToFileURL } = await import('node:url');
+            const { validateApproval, validateVerification } = await import(pathToFileURL(`${process.env.GITHUB_WORKSPACE}/scripts/actions-gate.mjs`));
+            const approval = validateApproval({repository: `${context.repo.owner}/${context.repo.repo}`, ref: context.ref, event: context.eventName, inputs: context.payload.inputs});
+            const {data: run} = await github.rest.actions.getWorkflowRun({...context.repo, run_id: approval.runId});
+            const jobs = await github.paginate(github.rest.actions.listJobsForWorkflowRun, {...context.repo, run_id: approval.runId, filter: 'latest', per_page: 100});
+            const {data: main} = await github.rest.repos.getBranch({...context.repo, branch:'main'});
+            validateVerification({run, jobs, approval, mainSha:main.commit.sha});
+            core.setOutput('sha', approval.sha);
+            core.setOutput('run-id', String(approval.runId));
+            core.setOutput('scope', approval.scope);
+            core.setOutput('artifact', approval.artifactName);
+            await core.summary.addHeading('明示的な公開承認を確認').addRaw(`承認者: ${context.actor}\n対象: ${approval.sha}\n検証: ${approval.runId}\n範囲: ${approval.scope}`).write();
+  deploy:
+    name: Deploy only approved tested bytes
+    needs: gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      actions: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ needs.gate.outputs.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '22'
+      - name: Recheck main has not moved
+        uses: actions/github-script@v7
+        env:
+          APPROVED_SHA: ${{ needs.gate.outputs.sha }}
+        with:
+          script: |
+            const {data: main} = await github.rest.repos.getBranch({...context.repo, branch:'main'});
+            if (main.commit.sha !== process.env.APPROVED_SHA) core.setFailed('mainが変更されました。検証・承認をやり直してください。');
+      - name: Download exact successful-run artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.gate.outputs.artifact }}
+          run-id: ${{ needs.gate.outputs.run-id }}
+          github-token: ${{ github.token }}
+          path: work/approved-release
+      - name: Verify bytes, identity and required files
+        run: node scripts/release.mjs validate work/approved-release
+        env:
+          APPROVED_SHA: ${{ needs.gate.outputs.sha }}
+          APPROVED_RUN_ID: ${{ needs.gate.outputs.run-id }}
+      - name: Install the same tested CLI without lifecycle scripts
+        working-directory: work/approved-release
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Require keyless authentication configuration
+        shell: bash
+        env:
+          WIF_PROVIDER: ${{ vars.WIF_PROVIDER }}
+          WIF_SERVICE_ACCOUNT: ${{ vars.WIF_SERVICE_ACCOUNT }}
+        run: |
+          test -n "$WIF_PROVIDER" || { echo 'WIF_PROVIDERが未設定です。'; exit 1; }
+          test -n "$WIF_SERVICE_ACCOUNT" || { echo 'WIF_SERVICE_ACCOUNTが未設定です。'; exit 1; }
+      - name: Obtain short-lived Google credentials (no private key)
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.WIF_PROVIDER }}
+          service_account: ${{ vars.WIF_SERVICE_ACCOUNT }}
+          create_credentials_file: true
+          export_environment_variables: true
+      - name: Deploy only the explicitly approved targets
+        working-directory: work/approved-release
+        shell: bash
+        env:
+          APPROVED_SCOPE: ${{ needs.gate.outputs.scope }}
+          FIREBASE_CLI_DISABLE_UPDATE_CHECK: 'true'
+        run: |
+          if [ "$APPROVED_SCOPE" = 'hosting-only' ]; then
+            node node_modules/firebase-tools/lib/bin/firebase.js deploy --only hosting --project wedding-reward-quest --non-interactive
+          elif [ "$APPROVED_SCOPE" = 'hosting-and-rules' ]; then
+            node node_modules/firebase-tools/lib/bin/firebase.js deploy --only hosting,firestore:rules --project wedding-reward-quest --non-interactive
+          else
+            echo '公開範囲が不正です。'; exit 1
+          fi

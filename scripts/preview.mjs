@@ -1,6 +1,6 @@
 import {readFile,writeFile,mkdir} from 'node:fs/promises';
 const parts=[];
-for(const name of ['itinerary','data','domain','storage','visuals','app']){
+for(const name of ['itinerary','data','domain','firebase-config','shared-state','firebase-client','storage','visuals','app']){
  let source=await readFile(`src/${name}.js`,'utf8');
  source=source.replace(/import \{[^}]*\} from '[^']+';/g,'').replace(/\bexport\s+(?=(?:const|function|class)\b)/g,'');
  parts.push(source);
