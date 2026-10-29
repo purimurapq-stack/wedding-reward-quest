@@ -29,12 +29,12 @@ service cloud.firestore {
       return p is map && p.keys().hasAll(['hp','mp','hunger','joy']) && p.keys().hasOnly(['hp','mp','hunger','joy'])
         && pair(p.hp) && pair(p.mp) && pair(p.hunger) && pair(p.joy);
     }
+    // Each operation validates player values once: exact init/reward, unchanged quest, or owner-only status.
     function envelope(d) {
       return d.keys().hasAll(['schemaVersion','players','done','questClears','logs','revision','lastOperation','updatedAt'])
         && d.keys().hasOnly(['schemaVersion','players','done','questClears','logs','revision','lastOperation','updatedAt'])
         && d.schemaVersion == 1 && d.revision is int && d.revision >= 0 && d.revision <= 100000
         && d.players is map && d.players.keys().hasAll(['groom','bride']) && d.players.keys().hasOnly(['groom','bride'])
-        && player(d.players.groom) && player(d.players.bride)
         && d.done is list && d.done.size() <= ${recoveryEvents.length}
         && d.questClears is map && d.questClears.size() <= ${quests.length}
         && d.logs is map && d.logs.size() <= 6
@@ -51,13 +51,17 @@ service cloud.firestore {
     function nightTable() { return {${nights}}; }
     function clamp(v, max) { return v < 0 ? 0 : (v > max ? max : v); }
     function rewardPair(before, after, maxGain, recovery) {
-      return after[1] == before[1] + maxGain && after[0] == clamp(before[0] + recovery, after[1]);
+      return after == [clamp(before[0] + recovery, before[1] + maxGain), before[1] + maxGain]
+        && after[0] is int && after[1] is int && after[1] > 0 && after[1] <= 10000;
     }
     function rewardPlayer(before, after, effect) {
-      return rewardPair(before.hp, after.hp, effect.max.get('hp',0), effect.current.get('hp',0))
-        && rewardPair(before.mp, after.mp, effect.max.get('mp',0), effect.current.get('mp',0))
-        && rewardPair(before.hunger, after.hunger, effect.max.get('hunger',0), effect.current.get('hunger',0))
-        && rewardPair(before.joy, after.joy, effect.max.get('joy',0), effect.current.get('joy',0));
+      let max = effect.max;
+      let recovery = effect.current;
+      return after.keys().hasAll(['hp','mp','hunger','joy']) && after.keys().hasOnly(['hp','mp','hunger','joy'])
+        && rewardPair(before.hp, after.hp, max.get('hp',0), recovery.get('hp',0))
+        && rewardPair(before.mp, after.mp, max.get('mp',0), recovery.get('mp',0))
+        && rewardPair(before.hunger, after.hunger, max.get('hunger',0), recovery.get('hunger',0))
+        && rewardPair(before.joy, after.joy, max.get('joy',0), recovery.get('joy',0));
     }
     function validEvent(before, after, op) {
       let effect = eventReward(op.get('id',''));
@@ -82,7 +86,7 @@ service cloud.firestore {
       return op.keys().hasOnly(['kind','date','player','actor']) && op.player == owner()
         && op.date is string && nightTable().keys().hasAny([op.date]) && request.time >= nightTable()[op.date]
         && after.done == before.done && after.questClears == before.questClears
-        && after.players[other()] == before.players[other()] && sameMax(before.players[owner()], after.players[owner()])
+        && after.players[other()] == before.players[other()] && player(after.players[owner()]) && sameMax(before.players[owner()], after.players[owner()])
         && after.logs.diff(before.logs).affectedKeys().hasOnly([op.date + ':' + owner()])
         && after.logs[op.date + ':' + owner()] == {'hp':after.players[owner()].hp[0], 'mp':after.players[owner()].mp[0], 'hunger':after.players[owner()].hunger[0], 'joy':after.players[owner()].joy[0]};
     }

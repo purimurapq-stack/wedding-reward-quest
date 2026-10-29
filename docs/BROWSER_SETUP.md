@@ -180,7 +180,7 @@ export const allowedUsers={
 1. GitHubの **Actions → Verify travel RPG** を開きます。
 2. **mainへのpush** またはmain上の手動検証で、緑色の成功になった実行を開きます。PRの成功結果は本番公開には使えません。
 3. Summaryに表示される **検証実行番号** と **40文字のコミットSHA** をコピーします。
-4. Artifactsの `firebase-release-コミットSHA` をダウンロードすれば、実際に適用される `firestore.rules` と配信ファイルを確認できます。秘密鍵は含みません。
+4. Summaryの **適用予定の本番Rules** に生成ルール全文を表示します。ブラウザだけで確認でき、ダウンロード不要です。配信ファイルも見たい場合だけArtifactsの `firebase-release-コミットSHA` をダウンロードできます。秘密鍵は含みません。
 
 この検証は依存関係インストール、ルール生成、通常テスト、**実際に適用するRulesファイルのEmulatorコンパイル/許可・拒否確認**、正常系/不正操作/同時実行のEmulatorテスト、ビルドを実行します。失敗した場合は公開せず、Actionsの実行URLをCodexへ伝えてください。
 

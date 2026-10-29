@@ -55,15 +55,4 @@ jobs:
           if-no-files-found: error
           retention-days: 14
       - name: Browser handoff
-        shell: bash
-        run: |
-          {
-            echo '## 検証済みリリース（公開はしていません）'
-            echo '- 通常テスト・本番Rulesのコンパイル/アクセス検証・Emulator正常/異常系・ビルドに成功しました。'
-            echo "- 検証実行番号: $GITHUB_RUN_ID"
-            echo "- コミットSHA: $GITHUB_SHA"
-            echo "- 承認欄に貼る文字列: DEPLOY $GITHUB_SHA"
-            echo '- mainのpush/手動検証だけが公開候補です。PR成果物は公開できません。'
-            echo '- 公開する場合は手動のApprove and deploy Firebaseを開き、上記番号とSHAを指定します。'
-            echo '- Rules適用は別の承認欄が必要です。生成RulesはArtifactsから確認できます。'
-          } >> "$GITHUB_STEP_SUMMARY"
+        run: node scripts/ci-summary.mjs
