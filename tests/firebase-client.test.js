@@ -1,5 +1,5 @@
 import test from 'node:test';import assert from 'node:assert/strict';
-import {createCloudClient} from '../src/firebase-client.js';import {allowedUsers} from '../src/firebase-config.js';import {fresh,applyEvent,setCurrent} from '../src/domain.js';import {initialShared} from '../src/shared-state.js';
+import {createCloudClient,commitSharedCommand} from '../src/firebase-client.js';import {allowedUsers} from '../src/firebase-config.js';import {fresh,applyEvent,setCurrent} from '../src/domain.js';import {initialShared} from '../src/shared-state.js';
 function fakeSDK(){
  let raw=initialShared('groomUID'),callback=null,errorCb=null,authCb=null,reads=0,txQueue=Promise.resolve();
  const auth={currentUser:null};const snapshot=()=>({exists:()=>raw!==null,data:()=>structuredClone(raw),metadata:{fromCache:false}});
@@ -33,4 +33,14 @@ test('permission errors clear previously visible shared data immediately',async(
 });
 test('first authorized creation is explicit and initializes only a missing document',async()=>{
  allowedUsers.groom='groomUID';allowedUsers.bride='brideUID';try{const fake=fakeSDK();fake.absent();const client=createCloudClient({sdkLoader:async()=>fake.sdk,now:realNow});await client.start();fake.signIn('groomUID');assert.equal(client.session.status,'missing');assert.equal(fake.data(),null);await client.create();assert.equal(fake.data().revision,0);assert.deepEqual(fake.data().done,[]);assert.equal(client.session.status,'ready');await assert.rejects(()=>client.create());}finally{allowedUsers.groom='';allowedUsers.bride='';}
+});
+
+test('a racing denied reward succeeds only after an authorized server read confirms that exact ID',async()=>{
+ const denial=Object.assign(Error('race'),{code:'permission-denied'});
+ const applied=applyEvent(fresh(),'d1-bath',realNow());const raw={...initialShared('groomUID'),players:applied.players,done:applied.done};
+ const sdk={runTransaction:async()=>{throw denial;},getDocFromServer:async()=>({exists:()=>true,data:()=>raw})};
+ const options={sdk,db:{},ref:{},uid:'groomUID',player:'groom',command:{kind:'event',id:'d1-bath'}};
+ assert.equal((await commitSharedCommand(options)).changed,false);
+ await assert.rejects(()=>commitSharedCommand({...options,command:{kind:'event',id:'d2-bath'}}),e=>e===denial);
+ sdk.getDocFromServer=async()=>{throw Object.assign(Error('no read permission'),{code:'permission-denied'});};await assert.rejects(()=>commitSharedCommand(options));
 });
