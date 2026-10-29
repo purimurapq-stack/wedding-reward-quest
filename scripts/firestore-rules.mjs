@@ -6,16 +6,19 @@ const literal=JSON.stringify;
 function ruleTime(at){const d=new Date(at),s=d.getUTCHours()*3600+d.getUTCMinutes()*60+d.getUTCSeconds();return `timestamp.date(${d.getUTCFullYear()}, ${d.getUTCMonth()+1}, ${d.getUTCDate()}) + duration.value(${s}, 's')`;}
 export function buildRules(users=allowedUsers){
  const keys=['hp','mp','hunger','joy'];
- const events=recoveryEvents.map(e=>{
+ const rewardGroups=new Map();
+ for(const e of recoveryEvents){
   const reward=eventEffect(e);
   const players=Object.fromEntries(['groom','bride'].map(role=>[role,Object.fromEntries(keys.map(key=>{
    const max=reward.max[key]||0,recovery=reward.current[key]||0;
    const base=`before.players.${role}.${key}`;
-   return [key,`[clamp(${base}[0] + (${recovery}), ${base}[1] + ${max}), ${base}[1] + ${max}]`];
+   return [key,max===0&&recovery===0?base:`[clamp(${base}[0] + (${recovery}), ${base}[1] + ${max}), ${base}[1] + ${max}]`];
   }))]));
   const expected='{'+Object.entries(players).map(([role,stats])=>`${literal(role)}:{`+Object.entries(stats).map(([key,value])=>`${literal(key)}:${value}`).join(',')+'}').join(',')+'}';
-  return `id == '${e.id}' ? (request.time >= ${ruleTime(e.availableAt)} && after.players == ${expected}) :`;
- }).join('\n        ');
+  const prefix=e.id.split('-')[0];if(!rewardGroups.has(prefix))rewardGroups.set(prefix,[]);
+  rewardGroups.get(prefix).push(`id == '${e.id}' ? (request.time >= ${ruleTime(e.availableAt)} && after.players == ${expected}) :`);
+ }
+ const events=[...rewardGroups].map(([prefix,branches])=>`id.matches('^${prefix}-.*') ? (${branches.join('\n        ')} false) :`).join('\n        ');
  const integerBounds=['groom','bride'].flatMap(role=>keys.map(key=>`p.${role}.${key}[0] is int && p.${role}.${key}[1] is int && p.${role}.${key}[1] > 0 && p.${role}.${key}[1] <= 10000`)).join('\n        && ');
  const questTimes=quests.map(q=>`'${q.id}': ${ruleTime(q.revealAt)}`).join(',\n        ');
  const nights=statusPrompts.map(p=>`'${p.date}': ${ruleTime(p.at)}`).join(',\n        ');
