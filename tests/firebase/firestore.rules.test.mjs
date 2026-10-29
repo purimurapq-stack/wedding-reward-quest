@@ -48,6 +48,9 @@ test('allowed users share one transaction-safe party; outsiders, tampering and r
    await assertFails(setDoc(ref,invalid));
   }
 
+ }catch(error){
+  try{const coverage=await (await fetch('http://127.0.0.1:8080/emulator/v1/projects/demo-wedding-allowed:ruleCoverage')).json();console.log('LOCAL_EMULATOR_COVERAGE',JSON.stringify(coverage));}catch{}
+  throw error;
  }finally{await env.cleanup();}
 });
 test('server rules reject future event/quest/status regardless of browser clock',async()=>{
