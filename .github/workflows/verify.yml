@@ -1,0 +1,68 @@
+name: Verify travel RPG
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: verify-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  verify:
+    name: Verify and package
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Install locked dependencies when available
+        shell: bash
+        run: |
+          if [ -f package-lock.json ]; then
+            npm ci --ignore-scripts --no-audit --no-fund
+          else
+            npm install --ignore-scripts --no-audit --no-fund
+          fi
+      - name: Generate production rules
+        run: npm run rules:generate
+      - name: Ordinary tests
+        run: npm test
+      - name: Firestore Security Rules (Emulator)
+        run: npm run test:rules
+        env:
+          CI: 'true'
+      - name: Build
+        run: npm run build
+      - name: Package tested release
+        run: node scripts/release.mjs prepare
+        env:
+          RULES_TESTED: 'true'
+      - name: Upload tested release
+        uses: actions/upload-artifact@v4
+        with:
+          name: firebase-release-${{ github.sha }}
+          path: work/firebase-release/
+          if-no-files-found: error
+          retention-days: 14
+      - name: Browser handoff
+        shell: bash
+        run: |
+          {
+            echo '## 検証済みリリース（公開はしていません）'
+            echo '- 通常テスト・本番Rulesのコンパイル/アクセス検証・Emulator正常/異常系・ビルドに成功しました。'
+            echo "- 検証実行番号: $GITHUB_RUN_ID"
+            echo "- コミットSHA: $GITHUB_SHA"
+            echo '- mainのpush/手動検証だけが公開候補です。PR成果物は公開できません。'
+            echo '- 公開する場合は手動のApprove and deploy Firebaseを開き、上記番号とSHAを指定します。'
+            echo '- Rules適用は別の承認欄が必要です。生成RulesはArtifactsから確認できます。'
+          } >> "$GITHUB_STEP_SUMMARY"

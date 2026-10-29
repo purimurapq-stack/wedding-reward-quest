@@ -42,3 +42,20 @@ test('server rules reject future event/quest/status regardless of browser clock'
   await assertFails(setDoc(ref,{...raw,questClears:{'q1-0':serverTimestamp()},revision:1,lastOperation:{kind:'quest',id:'q1-0',actor:uids.groom},updatedAt:serverTimestamp()}));
  }finally{await env.cleanup();}
 });
+test('the exact generated production file compiles and enforces configured UID access',async()=>{
+ const {allowedUsers}=await import('../../src/firebase-config.js');
+ const exact=await readFile('firestore.rules','utf8');
+ const env=await environment('demo-wedding-production-file',exact);
+ try{
+  await assertFails(getDoc(doc(env.unauthenticatedContext().firestore(),path)));
+  await assertFails(getDoc(doc(env.authenticatedContext('unregistered-ci-user',token).firestore(),path)));
+  const configured=allowedUsers.groom&&allowedUsers.bride&&allowedUsers.groom!==allowedUsers.bride;
+  if(configured){
+   const g=env.authenticatedContext(allowedUsers.groom,token).firestore(),b=env.authenticatedContext(allowedUsers.bride,token).firestore();
+   await assertSucceeds(setDoc(doc(g,path),make(allowedUsers.groom)));await assertSucceeds(getDoc(doc(b,path)));
+   const initial=(await getDoc(doc(g,path))).data();await assertFails(setDoc(doc(g,path),{...initial,unexpected:true,updatedAt:serverTimestamp()}));
+  }else{
+   for(const uid of [allowedUsers.groom||'placeholder-groom',allowedUsers.bride||'placeholder-bride'])await assertFails(setDoc(doc(env.authenticatedContext(uid,token).firestore(),path),make(uid)));
+  }
+ }finally{await env.cleanup();}
+});
