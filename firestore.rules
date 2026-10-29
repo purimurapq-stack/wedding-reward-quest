@@ -30,21 +30,45 @@ service cloud.firestore {
         && d.logs is map && d.logs.size() <= 6
         && d.lastOperation is map && d.lastOperation.actor == request.auth.uid && d.updatedAt == request.time;
     }
-    function eventReward(id) {
-      // Lazy selection: build only the requested effect, not the entire trip table.
-      return id == 'd1-rest' ? {'at': timestamp.date(2026, 10, 31) + duration.value(28800, 's'), 'max': {"hp":25,"mp":25}, 'current': {"hp":20,"mp":50}} :
-        id == 'd1-meal' ? {'at': timestamp.date(2026, 10, 31) + duration.value(43200, 's'), 'max': {"hp":25,"joy":30}, 'current': {"hp":35,"hunger":-40,"joy":30}} :
-        id == 'd1-bath' ? {'at': timestamp.date(2026, 10, 31) + duration.value(43200, 's'), 'max': {"hp":30}, 'current': {"hp":70,"mp":20}} :
-        id == 'd1-sleep' ? {'at': timestamp.date(2026, 11, 1) + duration.value(0, 's'), 'max': {"hp":50,"mp":40}, 'current': {"hp":100,"mp":80}} :
-        id == 'd2-view' ? {'at': timestamp.date(2026, 11, 1) + duration.value(10800, 's'), 'max': {"mp":80,"joy":60}, 'current': {"mp":90,"joy":60}} :
-        id == 'd2-snack' ? {'at': timestamp.date(2026, 11, 1) + duration.value(18000, 's'), 'max': {"hp":25,"joy":40}, 'current': {"hp":40,"hunger":-35,"joy":40}} :
-        id == 'd2-rest' ? {'at': timestamp.date(2026, 11, 1) + duration.value(32400, 's'), 'max': {"mp":60}, 'current': {"mp":120}} :
-        id == 'd2-meal' ? {'at': timestamp.date(2026, 11, 1) + duration.value(43200, 's'), 'max': {"hp":50,"joy":60}, 'current': {"hp":80,"hunger":-50,"joy":60}} :
-        id == 'd2-bath' ? {'at': timestamp.date(2026, 11, 1) + duration.value(43200, 's'), 'max': {"hp":100,"mp":20}, 'current': {"hp":180,"mp":50}} :
-        id == 'd2-sleep' ? {'at': timestamp.date(2026, 11, 2) + duration.value(0, 's'), 'max': {"hp":150,"mp":100}, 'current': {"hp":250,"mp":180}} :
-        id == 'd3-meal' ? {'at': timestamp.date(2026, 11, 2) + duration.value(0, 's'), 'max': {"hp":25,"joy":80}, 'current': {"hp":60,"hunger":-50,"joy":80}} :
-        id == 'd3-rest' ? {'at': timestamp.date(2026, 11, 2) + duration.value(0, 's'), 'max': {"mp":100,"joy":40}, 'current': {"mp":200,"joy":40}} :
-        {'at':timestamp.date(9999,1,1),'max':{},'current':{}};
+    function validReward(before, after, id) {
+      // Select a branch first. Only literal numeric vectors reach repeated stat comparisons.
+      return id == 'd1-rest' ? (request.time >= timestamp.date(2026, 10, 31) + duration.value(28800, 's')
+          && rewardPlayer(before.players.groom, after.players.groom, [25,25,0,0], [20,50,0,0])
+          && rewardPlayer(before.players.bride, after.players.bride, [25,25,0,0], [20,50,0,0])) :
+        id == 'd1-meal' ? (request.time >= timestamp.date(2026, 10, 31) + duration.value(43200, 's')
+          && rewardPlayer(before.players.groom, after.players.groom, [25,0,0,30], [35,0,-40,30])
+          && rewardPlayer(before.players.bride, after.players.bride, [25,0,0,30], [35,0,-40,30])) :
+        id == 'd1-bath' ? (request.time >= timestamp.date(2026, 10, 31) + duration.value(43200, 's')
+          && rewardPlayer(before.players.groom, after.players.groom, [30,0,0,0], [70,20,0,0])
+          && rewardPlayer(before.players.bride, after.players.bride, [30,0,0,0], [70,20,0,0])) :
+        id == 'd1-sleep' ? (request.time >= timestamp.date(2026, 11, 1) + duration.value(0, 's')
+          && rewardPlayer(before.players.groom, after.players.groom, [50,40,0,0], [100,80,0,0])
+          && rewardPlayer(before.players.bride, after.players.bride, [50,40,0,0], [100,80,0,0])) :
+        id == 'd2-view' ? (request.time >= timestamp.date(2026, 11, 1) + duration.value(10800, 's')
+          && rewardPlayer(before.players.groom, after.players.groom, [0,80,0,60], [0,90,0,60])
+          && rewardPlayer(before.players.bride, after.players.bride, [0,80,0,60], [0,90,0,60])) :
+        id == 'd2-snack' ? (request.time >= timestamp.date(2026, 11, 1) + duration.value(18000, 's')
+          && rewardPlayer(before.players.groom, after.players.groom, [25,0,0,40], [40,0,-35,40])
+          && rewardPlayer(before.players.bride, after.players.bride, [25,0,0,40], [40,0,-35,40])) :
+        id == 'd2-rest' ? (request.time >= timestamp.date(2026, 11, 1) + duration.value(32400, 's')
+          && rewardPlayer(before.players.groom, after.players.groom, [0,60,0,0], [0,120,0,0])
+          && rewardPlayer(before.players.bride, after.players.bride, [0,60,0,0], [0,120,0,0])) :
+        id == 'd2-meal' ? (request.time >= timestamp.date(2026, 11, 1) + duration.value(43200, 's')
+          && rewardPlayer(before.players.groom, after.players.groom, [50,0,0,60], [80,0,-50,60])
+          && rewardPlayer(before.players.bride, after.players.bride, [50,0,0,60], [80,0,-50,60])) :
+        id == 'd2-bath' ? (request.time >= timestamp.date(2026, 11, 1) + duration.value(43200, 's')
+          && rewardPlayer(before.players.groom, after.players.groom, [100,20,0,0], [180,50,0,0])
+          && rewardPlayer(before.players.bride, after.players.bride, [100,20,0,0], [180,50,0,0])) :
+        id == 'd2-sleep' ? (request.time >= timestamp.date(2026, 11, 2) + duration.value(0, 's')
+          && rewardPlayer(before.players.groom, after.players.groom, [150,100,0,0], [250,180,0,0])
+          && rewardPlayer(before.players.bride, after.players.bride, [150,100,0,0], [250,180,0,0])) :
+        id == 'd3-meal' ? (request.time >= timestamp.date(2026, 11, 2) + duration.value(0, 's')
+          && rewardPlayer(before.players.groom, after.players.groom, [25,0,0,80], [60,0,-50,80])
+          && rewardPlayer(before.players.bride, after.players.bride, [25,0,0,80], [60,0,-50,80])) :
+        id == 'd3-rest' ? (request.time >= timestamp.date(2026, 11, 2) + duration.value(0, 's')
+          && rewardPlayer(before.players.groom, after.players.groom, [0,100,0,40], [0,200,0,40])
+          && rewardPlayer(before.players.bride, after.players.bride, [0,100,0,40], [0,200,0,40])) :
+        false;
     }
     function questTable() {
       return {'q1-0': timestamp.date(2026, 10, 31) + duration.value(18420, 's'),
@@ -66,22 +90,18 @@ service cloud.firestore {
       return after == [clamp(before[0] + recovery, before[1] + maxGain), before[1] + maxGain]
         && after[0] is int && after[1] is int && after[1] > 0 && after[1] <= 10000;
     }
-    function rewardPlayer(before, after, effect) {
-      let max = effect.max;
-      let recovery = effect.current;
+    function rewardPlayer(before, after, max, recovery) {
       return after.keys().hasAll(['hp','mp','hunger','joy']) && after.keys().hasOnly(['hp','mp','hunger','joy'])
-        && rewardPair(before.hp, after.hp, max.get('hp',0), recovery.get('hp',0))
-        && rewardPair(before.mp, after.mp, max.get('mp',0), recovery.get('mp',0))
-        && rewardPair(before.hunger, after.hunger, max.get('hunger',0), recovery.get('hunger',0))
-        && rewardPair(before.joy, after.joy, max.get('joy',0), recovery.get('joy',0));
+        && rewardPair(before.hp, after.hp, max[0], recovery[0])
+        && rewardPair(before.mp, after.mp, max[1], recovery[1])
+        && rewardPair(before.hunger, after.hunger, max[2], recovery[2])
+        && rewardPair(before.joy, after.joy, max[3], recovery[3]);
     }
     function validEvent(before, after, op) {
-      let effect = eventReward(op.get('id',''));
       return op.keys().hasOnly(['kind','id','actor']) && op.id is string && op.id in ["d1-rest","d1-meal","d1-bath","d1-sleep","d2-view","d2-snack","d2-rest","d2-meal","d2-bath","d2-sleep","d3-meal","d3-rest"]
-        && request.time >= effect.at && !(op.id in before.done)
+        && !(op.id in before.done)
         && after.done == before.done.concat([op.id]) && after.questClears == before.questClears && after.logs == before.logs
-        && rewardPlayer(before.players.groom, after.players.groom, effect)
-        && rewardPlayer(before.players.bride, after.players.bride, effect);
+        && validReward(before, after, op.id);
     }
     function validQuest(before, after, op) {
       return op.keys().hasOnly(['kind','id','actor']) && op.id is string && questTable().keys().hasAny([op.id])
