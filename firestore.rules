@@ -16,33 +16,35 @@ service cloud.firestore {
         && p[1] > 0 && p[1] <= 10000 && p[0] >= 0 && p[0] <= p[1];
     }
     function player(p) {
-      return p is map && p.keys().hasAll(['hp','mp','hunger','joy']) && p.keys().hasOnly(['hp','mp','hunger','joy'])
+      return p is map && p.size() == 4 && p.keys().hasOnly(['hp','mp','hunger','joy'])
         && pair(p.hp) && pair(p.mp) && pair(p.hunger) && pair(p.joy);
     }
+    // Each operation validates player values once: exact init/reward, unchanged quest, or owner-only status.
     function envelope(d) {
-      return d.keys().hasAll(['schemaVersion','players','done','questClears','logs','revision','lastOperation','updatedAt'])
+      return d.size() == 8
         && d.keys().hasOnly(['schemaVersion','players','done','questClears','logs','revision','lastOperation','updatedAt'])
         && d.schemaVersion == 1 && d.revision is int && d.revision >= 0 && d.revision <= 100000
-        && d.players is map && d.players.keys().hasAll(['groom','bride']) && d.players.keys().hasOnly(['groom','bride'])
-        && player(d.players.groom) && player(d.players.bride)
+        && d.players is map && d.players.size() == 2 && d.players.keys().hasOnly(['groom','bride'])
         && d.done is list && d.done.size() <= 12
         && d.questClears is map && d.questClears.size() <= 10
         && d.logs is map && d.logs.size() <= 6
         && d.lastOperation is map && d.lastOperation.actor == request.auth.uid && d.updatedAt == request.time;
     }
-    function eventTable() {
-      return {'d1-rest': {'at': timestamp.date(2026, 10, 31) + duration.value(28800, 's'), 'max': {"hp":25,"mp":25}, 'current': {"hp":20,"mp":50}},
-        'd1-meal': {'at': timestamp.date(2026, 10, 31) + duration.value(43200, 's'), 'max': {"hp":25,"joy":30}, 'current': {"hp":35,"hunger":-40,"joy":30}},
-        'd1-bath': {'at': timestamp.date(2026, 10, 31) + duration.value(43200, 's'), 'max': {"hp":30}, 'current': {"hp":70,"mp":20}},
-        'd1-sleep': {'at': timestamp.date(2026, 11, 1) + duration.value(0, 's'), 'max': {"hp":50,"mp":40}, 'current': {"hp":100,"mp":80}},
-        'd2-view': {'at': timestamp.date(2026, 11, 1) + duration.value(10800, 's'), 'max': {"mp":80,"joy":60}, 'current': {"mp":90,"joy":60}},
-        'd2-snack': {'at': timestamp.date(2026, 11, 1) + duration.value(18000, 's'), 'max': {"hp":25,"joy":40}, 'current': {"hp":40,"hunger":-35,"joy":40}},
-        'd2-rest': {'at': timestamp.date(2026, 11, 1) + duration.value(32400, 's'), 'max': {"mp":60}, 'current': {"mp":120}},
-        'd2-meal': {'at': timestamp.date(2026, 11, 1) + duration.value(43200, 's'), 'max': {"hp":50,"joy":60}, 'current': {"hp":80,"hunger":-50,"joy":60}},
-        'd2-bath': {'at': timestamp.date(2026, 11, 1) + duration.value(43200, 's'), 'max': {"hp":100,"mp":20}, 'current': {"hp":180,"mp":50}},
-        'd2-sleep': {'at': timestamp.date(2026, 11, 2) + duration.value(0, 's'), 'max': {"hp":150,"mp":100}, 'current': {"hp":250,"mp":180}},
-        'd3-meal': {'at': timestamp.date(2026, 11, 2) + duration.value(0, 's'), 'max': {"hp":25,"joy":80}, 'current': {"hp":60,"hunger":-50,"joy":80}},
-        'd3-rest': {'at': timestamp.date(2026, 11, 2) + duration.value(0, 's'), 'max': {"mp":100,"joy":40}, 'current': {"mp":200,"joy":40}}};
+    function validReward(before, after, id) {
+      // Select a branch first. Only literal numeric vectors reach repeated stat comparisons.
+      return id.matches('^d1-.*') ? (id == 'd1-rest' ? (request.time >= timestamp.date(2026, 10, 31) + duration.value(28800, 's') && after.players == {"groom":{"hp":[clamp(before.players.groom.hp[0] + (20), before.players.groom.hp[1] + 25), before.players.groom.hp[1] + 25],"mp":[clamp(before.players.groom.mp[0] + (50), before.players.groom.mp[1] + 25), before.players.groom.mp[1] + 25],"hunger":before.players.groom.hunger,"joy":before.players.groom.joy},"bride":{"hp":[clamp(before.players.bride.hp[0] + (20), before.players.bride.hp[1] + 25), before.players.bride.hp[1] + 25],"mp":[clamp(before.players.bride.mp[0] + (50), before.players.bride.mp[1] + 25), before.players.bride.mp[1] + 25],"hunger":before.players.bride.hunger,"joy":before.players.bride.joy}}) :
+        id == 'd1-meal' ? (request.time >= timestamp.date(2026, 10, 31) + duration.value(43200, 's') && after.players == {"groom":{"hp":[clamp(before.players.groom.hp[0] + (35), before.players.groom.hp[1] + 25), before.players.groom.hp[1] + 25],"mp":before.players.groom.mp,"hunger":[clamp(before.players.groom.hunger[0] + (-40), before.players.groom.hunger[1] + 0), before.players.groom.hunger[1] + 0],"joy":[clamp(before.players.groom.joy[0] + (30), before.players.groom.joy[1] + 30), before.players.groom.joy[1] + 30]},"bride":{"hp":[clamp(before.players.bride.hp[0] + (35), before.players.bride.hp[1] + 25), before.players.bride.hp[1] + 25],"mp":before.players.bride.mp,"hunger":[clamp(before.players.bride.hunger[0] + (-40), before.players.bride.hunger[1] + 0), before.players.bride.hunger[1] + 0],"joy":[clamp(before.players.bride.joy[0] + (30), before.players.bride.joy[1] + 30), before.players.bride.joy[1] + 30]}}) :
+        id == 'd1-bath' ? (request.time >= timestamp.date(2026, 10, 31) + duration.value(43200, 's') && after.players == {"groom":{"hp":[clamp(before.players.groom.hp[0] + (70), before.players.groom.hp[1] + 30), before.players.groom.hp[1] + 30],"mp":[clamp(before.players.groom.mp[0] + (20), before.players.groom.mp[1] + 0), before.players.groom.mp[1] + 0],"hunger":before.players.groom.hunger,"joy":before.players.groom.joy},"bride":{"hp":[clamp(before.players.bride.hp[0] + (70), before.players.bride.hp[1] + 30), before.players.bride.hp[1] + 30],"mp":[clamp(before.players.bride.mp[0] + (20), before.players.bride.mp[1] + 0), before.players.bride.mp[1] + 0],"hunger":before.players.bride.hunger,"joy":before.players.bride.joy}}) :
+        id == 'd1-sleep' ? (request.time >= timestamp.date(2026, 11, 1) + duration.value(0, 's') && after.players == {"groom":{"hp":[clamp(before.players.groom.hp[0] + (100), before.players.groom.hp[1] + 50), before.players.groom.hp[1] + 50],"mp":[clamp(before.players.groom.mp[0] + (80), before.players.groom.mp[1] + 40), before.players.groom.mp[1] + 40],"hunger":before.players.groom.hunger,"joy":before.players.groom.joy},"bride":{"hp":[clamp(before.players.bride.hp[0] + (100), before.players.bride.hp[1] + 50), before.players.bride.hp[1] + 50],"mp":[clamp(before.players.bride.mp[0] + (80), before.players.bride.mp[1] + 40), before.players.bride.mp[1] + 40],"hunger":before.players.bride.hunger,"joy":before.players.bride.joy}}) : false) :
+        id.matches('^d2-.*') ? (id == 'd2-view' ? (request.time >= timestamp.date(2026, 11, 1) + duration.value(10800, 's') && after.players == {"groom":{"hp":before.players.groom.hp,"mp":[clamp(before.players.groom.mp[0] + (90), before.players.groom.mp[1] + 80), before.players.groom.mp[1] + 80],"hunger":before.players.groom.hunger,"joy":[clamp(before.players.groom.joy[0] + (60), before.players.groom.joy[1] + 60), before.players.groom.joy[1] + 60]},"bride":{"hp":before.players.bride.hp,"mp":[clamp(before.players.bride.mp[0] + (90), before.players.bride.mp[1] + 80), before.players.bride.mp[1] + 80],"hunger":before.players.bride.hunger,"joy":[clamp(before.players.bride.joy[0] + (60), before.players.bride.joy[1] + 60), before.players.bride.joy[1] + 60]}}) :
+        id == 'd2-snack' ? (request.time >= timestamp.date(2026, 11, 1) + duration.value(18000, 's') && after.players == {"groom":{"hp":[clamp(before.players.groom.hp[0] + (40), before.players.groom.hp[1] + 25), before.players.groom.hp[1] + 25],"mp":before.players.groom.mp,"hunger":[clamp(before.players.groom.hunger[0] + (-35), before.players.groom.hunger[1] + 0), before.players.groom.hunger[1] + 0],"joy":[clamp(before.players.groom.joy[0] + (40), before.players.groom.joy[1] + 40), before.players.groom.joy[1] + 40]},"bride":{"hp":[clamp(before.players.bride.hp[0] + (40), before.players.bride.hp[1] + 25), before.players.bride.hp[1] + 25],"mp":before.players.bride.mp,"hunger":[clamp(before.players.bride.hunger[0] + (-35), before.players.bride.hunger[1] + 0), before.players.bride.hunger[1] + 0],"joy":[clamp(before.players.bride.joy[0] + (40), before.players.bride.joy[1] + 40), before.players.bride.joy[1] + 40]}}) :
+        id == 'd2-rest' ? (request.time >= timestamp.date(2026, 11, 1) + duration.value(32400, 's') && after.players == {"groom":{"hp":before.players.groom.hp,"mp":[clamp(before.players.groom.mp[0] + (120), before.players.groom.mp[1] + 60), before.players.groom.mp[1] + 60],"hunger":before.players.groom.hunger,"joy":before.players.groom.joy},"bride":{"hp":before.players.bride.hp,"mp":[clamp(before.players.bride.mp[0] + (120), before.players.bride.mp[1] + 60), before.players.bride.mp[1] + 60],"hunger":before.players.bride.hunger,"joy":before.players.bride.joy}}) :
+        id == 'd2-meal' ? (request.time >= timestamp.date(2026, 11, 1) + duration.value(43200, 's') && after.players == {"groom":{"hp":[clamp(before.players.groom.hp[0] + (80), before.players.groom.hp[1] + 50), before.players.groom.hp[1] + 50],"mp":before.players.groom.mp,"hunger":[clamp(before.players.groom.hunger[0] + (-50), before.players.groom.hunger[1] + 0), before.players.groom.hunger[1] + 0],"joy":[clamp(before.players.groom.joy[0] + (60), before.players.groom.joy[1] + 60), before.players.groom.joy[1] + 60]},"bride":{"hp":[clamp(before.players.bride.hp[0] + (80), before.players.bride.hp[1] + 50), before.players.bride.hp[1] + 50],"mp":before.players.bride.mp,"hunger":[clamp(before.players.bride.hunger[0] + (-50), before.players.bride.hunger[1] + 0), before.players.bride.hunger[1] + 0],"joy":[clamp(before.players.bride.joy[0] + (60), before.players.bride.joy[1] + 60), before.players.bride.joy[1] + 60]}}) :
+        id == 'd2-bath' ? (request.time >= timestamp.date(2026, 11, 1) + duration.value(43200, 's') && after.players == {"groom":{"hp":[clamp(before.players.groom.hp[0] + (180), before.players.groom.hp[1] + 100), before.players.groom.hp[1] + 100],"mp":[clamp(before.players.groom.mp[0] + (50), before.players.groom.mp[1] + 20), before.players.groom.mp[1] + 20],"hunger":before.players.groom.hunger,"joy":before.players.groom.joy},"bride":{"hp":[clamp(before.players.bride.hp[0] + (180), before.players.bride.hp[1] + 100), before.players.bride.hp[1] + 100],"mp":[clamp(before.players.bride.mp[0] + (50), before.players.bride.mp[1] + 20), before.players.bride.mp[1] + 20],"hunger":before.players.bride.hunger,"joy":before.players.bride.joy}}) :
+        id == 'd2-sleep' ? (request.time >= timestamp.date(2026, 11, 2) + duration.value(0, 's') && after.players == {"groom":{"hp":[clamp(before.players.groom.hp[0] + (250), before.players.groom.hp[1] + 150), before.players.groom.hp[1] + 150],"mp":[clamp(before.players.groom.mp[0] + (180), before.players.groom.mp[1] + 100), before.players.groom.mp[1] + 100],"hunger":before.players.groom.hunger,"joy":before.players.groom.joy},"bride":{"hp":[clamp(before.players.bride.hp[0] + (250), before.players.bride.hp[1] + 150), before.players.bride.hp[1] + 150],"mp":[clamp(before.players.bride.mp[0] + (180), before.players.bride.mp[1] + 100), before.players.bride.mp[1] + 100],"hunger":before.players.bride.hunger,"joy":before.players.bride.joy}}) : false) :
+        id.matches('^d3-.*') ? (id == 'd3-meal' ? (request.time >= timestamp.date(2026, 11, 2) + duration.value(0, 's') && after.players == {"groom":{"hp":[clamp(before.players.groom.hp[0] + (60), before.players.groom.hp[1] + 25), before.players.groom.hp[1] + 25],"mp":before.players.groom.mp,"hunger":[clamp(before.players.groom.hunger[0] + (-50), before.players.groom.hunger[1] + 0), before.players.groom.hunger[1] + 0],"joy":[clamp(before.players.groom.joy[0] + (80), before.players.groom.joy[1] + 80), before.players.groom.joy[1] + 80]},"bride":{"hp":[clamp(before.players.bride.hp[0] + (60), before.players.bride.hp[1] + 25), before.players.bride.hp[1] + 25],"mp":before.players.bride.mp,"hunger":[clamp(before.players.bride.hunger[0] + (-50), before.players.bride.hunger[1] + 0), before.players.bride.hunger[1] + 0],"joy":[clamp(before.players.bride.joy[0] + (80), before.players.bride.joy[1] + 80), before.players.bride.joy[1] + 80]}}) :
+        id == 'd3-rest' ? (request.time >= timestamp.date(2026, 11, 2) + duration.value(0, 's') && after.players == {"groom":{"hp":before.players.groom.hp,"mp":[clamp(before.players.groom.mp[0] + (200), before.players.groom.mp[1] + 100), before.players.groom.mp[1] + 100],"hunger":before.players.groom.hunger,"joy":[clamp(before.players.groom.joy[0] + (40), before.players.groom.joy[1] + 40), before.players.groom.joy[1] + 40]},"bride":{"hp":before.players.bride.hp,"mp":[clamp(before.players.bride.mp[0] + (200), before.players.bride.mp[1] + 100), before.players.bride.mp[1] + 100],"hunger":before.players.bride.hunger,"joy":[clamp(before.players.bride.joy[0] + (40), before.players.bride.joy[1] + 40), before.players.bride.joy[1] + 40]}}) : false) :
+        false;
     }
     function questTable() {
       return {'q1-0': timestamp.date(2026, 10, 31) + duration.value(18420, 's'),
@@ -60,23 +62,21 @@ service cloud.firestore {
         '2026-11-01': timestamp.date(2026, 11, 1) + duration.value(43200, 's'),
         '2026-11-02': timestamp.date(2026, 11, 2) + duration.value(21600, 's')}; }
     function clamp(v, max) { return v < 0 ? 0 : (v > max ? max : v); }
-    function rewardPair(before, after, maxGain, recovery) {
-      return after[1] == before[1] + maxGain && after[0] == clamp(before[0] + recovery, after[1]);
-    }
-    function rewardPlayer(before, after, effect) {
-      return rewardPair(before.hp, after.hp, effect.max.get('hp',0), effect.current.get('hp',0))
-        && rewardPair(before.mp, after.mp, effect.max.get('mp',0), effect.current.get('mp',0))
-        && rewardPair(before.hunger, after.hunger, effect.max.get('hunger',0), effect.current.get('hunger',0))
-        && rewardPair(before.joy, after.joy, effect.max.get('joy',0), effect.current.get('joy',0));
+    function computedPlayerBounds(p) {
+      return p.groom.hp[0] is int && p.groom.hp[1] is int && p.groom.hp[1] > 0 && p.groom.hp[1] <= 10000
+        && p.groom.mp[0] is int && p.groom.mp[1] is int && p.groom.mp[1] > 0 && p.groom.mp[1] <= 10000
+        && p.groom.hunger[0] is int && p.groom.hunger[1] is int && p.groom.hunger[1] > 0 && p.groom.hunger[1] <= 10000
+        && p.groom.joy[0] is int && p.groom.joy[1] is int && p.groom.joy[1] > 0 && p.groom.joy[1] <= 10000
+        && p.bride.hp[0] is int && p.bride.hp[1] is int && p.bride.hp[1] > 0 && p.bride.hp[1] <= 10000
+        && p.bride.mp[0] is int && p.bride.mp[1] is int && p.bride.mp[1] > 0 && p.bride.mp[1] <= 10000
+        && p.bride.hunger[0] is int && p.bride.hunger[1] is int && p.bride.hunger[1] > 0 && p.bride.hunger[1] <= 10000
+        && p.bride.joy[0] is int && p.bride.joy[1] is int && p.bride.joy[1] > 0 && p.bride.joy[1] <= 10000;
     }
     function validEvent(before, after, op) {
-      let table = eventTable();
-      let effect = table.get(op.get('id',''), {'at':timestamp.date(9999,1,1),'max':{},'current':{}});
-      return op.keys().hasOnly(['kind','id','actor']) && op.id is string && table.keys().hasAny([op.id])
-        && request.time >= effect.at && !(op.id in before.done)
+      return op.keys().hasOnly(['kind','id','actor']) && op.id is string && op.id in ["d1-rest","d1-meal","d1-bath","d1-sleep","d2-view","d2-snack","d2-rest","d2-meal","d2-bath","d2-sleep","d3-meal","d3-rest"]
+        && !(op.id in before.done)
         && after.done == before.done.concat([op.id]) && after.questClears == before.questClears && after.logs == before.logs
-        && rewardPlayer(before.players.groom, after.players.groom, effect)
-        && rewardPlayer(before.players.bride, after.players.bride, effect);
+        && computedPlayerBounds(after.players) && validReward(before, after, op.id);
     }
     function validQuest(before, after, op) {
       return op.keys().hasOnly(['kind','id','actor']) && op.id is string && questTable().keys().hasAny([op.id])
@@ -93,7 +93,7 @@ service cloud.firestore {
       return op.keys().hasOnly(['kind','date','player','actor']) && op.player == owner()
         && op.date is string && nightTable().keys().hasAny([op.date]) && request.time >= nightTable()[op.date]
         && after.done == before.done && after.questClears == before.questClears
-        && after.players[other()] == before.players[other()] && sameMax(before.players[owner()], after.players[owner()])
+        && after.players[other()] == before.players[other()] && player(after.players[owner()]) && sameMax(before.players[owner()], after.players[owner()])
         && after.logs.diff(before.logs).affectedKeys().hasOnly([op.date + ':' + owner()])
         && after.logs[op.date + ':' + owner()] == {'hp':after.players[owner()].hp[0], 'mp':after.players[owner()].mp[0], 'hunger':after.players[owner()].hunger[0], 'joy':after.players[owner()].joy[0]};
     }

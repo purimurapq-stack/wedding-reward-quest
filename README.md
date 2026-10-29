@@ -30,6 +30,23 @@ URL制御は演出上のネタバレ防止だけで、機密保護ではあり�
 
 `src/visuals.js` の相対パスを全画面で共通使用。`object-fit:contain` と `image-rendering:pixelated` で比率と輪郭を維持。結婚式シーンだけ2人のジャンプをずらし、帰宅シーンでは止めます。GitHub Pagesの `/wedding-reward-quest/` 配下でもFirebase Hostingのルートでも同じ相対パスで動作します。
 
+## ブラウザ中心の設定・公開（おすすめ）
+
+**PCへのソフトのインストール・コマンド操作は不要にできます。** [ブラウザ操作だけの手順](docs/BROWSER_SETUP.md)を参照してください。
+
+- Actionsが依存関係・Node/Java・ルール生成・通常テスト・Firestore Emulator・ビルドを実行
+- 適用する本番Rulesファイル自体もEmulatorへ読み込み、検証後の同じ成果物だけを保存
+- 公開は検証成功後に実行番号とSHAを指定し、手動で`DEPLOY SHA`を承認した場合だけ
+- Rules適用はさらに`APPLY VERIFIED RULES`の明示承認が必要
+- 認証はOIDC/Workload Identity Federation。JSON秘密鍵やFirebase長期トークンをGitHubへ保存しない
+- UIDは初回Googleログイン後にFirebase ConsoleのAuthentication → Usersから取得し、GitHubの鉛筆ボタンで登録
+
+まだユーザーUIDがない場合は、共有拒否を維持した`hosting-only`の初回承認公開 → 2人がGoogleログイン → ConsoleでUID取得 → GitHub登録 → CI → `hosting-and-rules`承認公開の順です。
+
+非公開リポジトリのプランによる環境レビュー機能の制約を避け、承認はテスト成功後の手動workflow_dispatch＋対象SHA入力を必須にしています。二者承認ではありません。Push/PRだけで公開するワークフローはありません。
+
+以下はローカル環境も使いたい場合の補足手順です。ブラウザ中心ならインストール部分は不要です。
+
 ## Windows PCでの準備
 1. Node.js公式サイトから **Node.js 22 LTS以降** をインストールします。
 2. GitHubで今回の作業ブランチを選び、緑色の **Code → Download ZIP** でダウンロードし、展開します。既存の別作業フォルダと取り違えないようにしてください。
@@ -168,4 +185,4 @@ SETTINGSのバックアップは現在表示できる状態と旧端末バック
 ## 実施した検証・残件
 Nodeの通常テストではゲーム数値・重複・マスク・旅程/便切替・旧保存、共有/非共有の分離、未許可時のFirestore未購読、模擬SDKでのトランザクション重複防止/本人編集/ログアウト消去、生成ルールの整合性、簡易DOMでの5画面/表示拒否/チェック部分更新を検証します。
 
-開発環境のネットワーク制約でテスト用npmパッケージを取得できないため、**EmulatorでのSecurity Rules評価は未実施**です。Google実ログイン・Firestore実同期・iPhone/Android実機テストも未実施。これらと元PNG配置、UID登録、ルール適用、Hosting公開は上記手順で実施してください。通常テストの成功をSecurity Rulesの実評価の代わりにはしません。
+この開発環境ではネットワーク制約でEmulatorを実行できません。今回追加したActionsで通常テストとEmulatorの両方を実行し、成功結果を確認してください。Actionsの実行・結果はPR/Actions画面に表示されます。Google実ログイン・Firestore実同期・iPhone/Android実機テストも未実施。これらと元PNG配置、UID登録、ルール適用、Hosting公開は上記手順で実施してください。通常テストの成功をSecurity Rulesの実評価の代わりにはしません。
