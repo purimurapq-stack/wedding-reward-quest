@@ -1,0 +1,9 @@
+node_modules/
+dist/
+.env*
+private/*
+!private/README.md
+work/
+.firebase/
+*-debug.log
+gha-creds-*.json
