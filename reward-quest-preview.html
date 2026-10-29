@@ -18,6 +18,7 @@
 /* Large, visible per-event growth. Max gauges fill to the new capacity. */
 .growth-cards{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:18px 0}.growth-player{background:#1b2843;border:2px solid #9c905e;padding:12px;min-width:0}.growth-player header{display:flex;align-items:center;gap:8px}.growth-player .character.sprite{width:36px;height:48px}.growth-player h3{font-size:13px}.growth-stat{margin:14px 0;font-size:11px}.growth-stat>span{display:block}.growth-stat>strong{display:block;font-size:22px;color:#ffe29a;line-height:1.7}.growth-stat div>b{font-size:18px;color:#f6d17b;font-variant-numeric:tabular-nums}.growth-track{height:11px;background:#0b1529;border:1px solid #8d8367;margin-top:7px;overflow:hidden}.growth-track i{height:100%;display:block;background:#8bca88;border-top:3px solid #d0f0a1}.level-title{color:#ffe79b!important;text-shadow:2px 2px #a25e58;font-size:30px!important;text-align:center;letter-spacing:3px}.scene0.opening{background:#52768a;background-image:linear-gradient(#fff4c318,#fff4c300)}.scene0 .opening h1{color:#fff0ae}.scene1 .intro-gauge i{animation:drain 8s linear forwards}.scene1 .intro-gauge:nth-of-type(even) i{animation-delay:.3s}.intro-gauge{max-width:70vw;width:240px}.intro-gauge i{max-width:100%}.scene1 .bed{box-shadow:5px 5px #151c31}.scene1 .introart::after{content:'つかれた……';position:absolute;top:28px;left:35%;font-size:13px;color:#c5c0dc;transform:rotate(-7deg)}@media(max-width:360px){.growth-cards{gap:8px}.growth-player{padding:8px}.growth-stat>strong{font-size:19px}}
 .reduced .scene1 .intro-gauge i{width:25%}@media(prefers-reduced-motion:reduce){.scene1 .intro-gauge i{width:25%}}
+.auth-panel code{display:inline-block;max-width:100%;overflow-wrap:anywhere;user-select:all;font-size:11px;color:#f1d799}.auth-panel .notice{overflow-wrap:anywhere}
 </style></head><body><div id="app"></div><div id="toast" role="status" aria-live="polite"></div><script type="module">
 // 実旅行の初期計画。時刻・移動区間はこのファイルで編集できます。
 const itineraryDefaults={
@@ -698,14 +699,170 @@ function setCurrent(state,role,values,date){const next=structuredClone(state);fo
 function notifications(s,now){const entries=[...quests.filter(q=>unlocked(q,now)).map(q=>({id:`quest:${q.id}`,type:q.final?'final':'quest',ref:q.id,title:q.final?'QUEST COMPLETE!':'NEW QUEST UNLOCKED!',text:questTitle(q,s.role,now)})),...recoveryEvents.filter(e=>Date.parse(e.availableAt)<=now&&!s.done.includes(e.id)).map(e=>({id:`event:${e.id}`,type:'event',ref:e.id,title:'今日もおつかれさま！',text:effects.find(f=>f.id===e.effect).name+'？'})),...statusPrompts.filter(p=>Date.parse(p.at)<=now&&!s.logs[`${p.date}:${s.role}`]).map(p=>({id:`status:${p.date}`,type:'status',ref:p.date,title:"TODAY’S STATUS",text:'今日の冒険はどうだった？'}))];return entries.filter(n=>!s.ack.includes(`${s.role}:${n.id}`));}
 function migrate(s){if(s.version===1){const next={...fresh(),...s,version:2,questClears:{},ack:[],plan:{}};next.done=recoveryEvents.filter(e=>s.done.includes(`${e.id.slice(1,2)}:${e.effect}`)&&e.id===`d${e.id.slice(1,2)}-${e.effect}`).map(e=>e.id);return next;}return {...s,plan:s.plan||{}};}
 
+// Firebase Web configuration is public identification, not an Admin SDK secret.
+const firebaseConfig={
+ apiKey:'AIzaSyDT4Vn0RC2fHv5-gHMS-8HI10QFpZqa9h4',
+ authDomain:'wedding-reward-quest.firebaseapp.com',
+ projectId:'wedding-reward-quest',
+ storageBucket:'wedding-reward-quest.firebasestorage.app',
+ messagingSenderId:'592615226461',
+ appId:'1:592615226461:web:6796544acb7e10142de1b4'
+};
+// Replace BOTH empty values with Authentication > Users > UID, then regenerate rules.
+// Neither URL role nor email is used for authorization. Empty values deny access.
+const allowedUsers={groom:'',bride:''};
+const sharedDocumentPath='couples/wedding-2026';
+function firebaseSetupIssues(){
+ const issues=[];
+ for(const key of ['apiKey','authDomain','projectId','appId'])if(!firebaseConfig[key])issues.push(`firebaseConfig.${key}`);
+ for(const role of ['groom','bride'])if(!allowedUsers[role])issues.push(`allowedUsers.${role}（Firebase UID）`);
+ if(allowedUsers.groom&&allowedUsers.groom===allowedUsers.bride)issues.push('新郎・新婦には異なるUIDが必要です');
+ return issues;
+}
 
-const KEY='reward-quest-v1';
-// Device-local persistence only; role switching is a presentation preference.
-const repository={load(){const raw=localStorage.getItem(KEY);if(!raw)return fresh();const s=migrate(JSON.parse(raw));if(s.version!==2||!s.players||!Array.isArray(s.done)||!Array.isArray(s.items)||!Array.isArray(s.ack)||!s.questClears||!s.logs)throw Error('保存データを読み込めません。バックアップをご確認ください。');for(const role of ['bride','groom'])for(const k of ['hp','mp','hunger','joy']){const a=s.players[role]?.[k];if(!Array.isArray(a)||a.length!==2||!a.every(Number.isFinite)||a[0]<0||a[1]<=0||a[0]>a[1])throw Error('保存データの形式が不正です');}return s;},save(s){localStorage.setItem(KEY,JSON.stringify(s));},async transact(fn){if(navigator.locks)return navigator.locks.request(KEY,()=>{const next=fn(this.load());this.save(next);return next;});const next=fn(this.load());this.save(next);return next;}};
+
+// Only these fields cross the network. Items, view role, pictures, plan and notifications never do.
+const sharedKeys=['players','done','questClears','logs'];
+function extractShared(state){return Object.fromEntries(sharedKeys.map(k=>[k,structuredClone(state[k])]));}
+function initialShared(uid){return {schemaVersion:1,...extractShared(fresh()),revision:0,lastOperation:{kind:'init',actor:uid}};}
+function detectCommand(before,after,player){
+ if(JSON.stringify(extractShared(before))===JSON.stringify(extractShared(after)))return null;
+ const added=after.done.filter(id=>!before.done.includes(id));
+ if(added.length===1)return {kind:'event',id:added[0]};
+ const questIds=Object.keys(after.questClears).filter(id=>!before.questClears[id]);
+ if(questIds.length===1)return {kind:'quest',id:questIds[0]};
+ const logKeys=Object.keys(after.logs).filter(k=>JSON.stringify(after.logs[k])!==JSON.stringify(before.logs[k]));
+ if(logKeys.length===1){const [date,owner]=logKeys[0].split(':');if(owner!==player)throw Error('現在値を編集できるのはログイン中の本人だけです');return {kind:'status',date,player,values:after.logs[logKeys[0]]};}
+ throw Error('対応していない共有データの変更です');
+}
+function executeCommand(state,command,player,realNow){
+ if(command.kind==='event')return applyEvent(state,command.id,realNow);
+ if(command.kind==='quest')return clearQuest(state,command.id,realNow);
+ if(command.kind==='status'){
+  if(command.player!==player)throw Error('本人以外のステータスは更新できません');
+  const date=command.date;if(!['2026-10-31','2026-11-01','2026-11-02'].includes(date))throw Error('記録日が不正です');
+  if(realNow<Date.parse(`${date}T${date==='2026-11-02'?'15':'21'}:00:00+09:00`))throw Error('記録できる時刻になるまでお待ちください');
+  return setCurrent(state,player,command.values,date);
+ }
+ throw Error('操作を確認してください');
+}
+function decodeShared(data){
+ if(data?.schemaVersion!==1||!Number.isInteger(data.revision)||!Array.isArray(data.done)||!data.players||!data.questClears||!data.logs)throw Error('共有データの形式が異なります。上書きせず管理者に確認してください');
+ const out=extractShared(data);
+ for(const role of ['groom','bride'])for(const key of ['hp','mp','hunger','joy']){const pair=out.players[role]?.[key];if(!Array.isArray(pair)||pair.length!==2||!pair.every(Number.isInteger)||pair[0]<0||pair[1]<=0||pair[0]>pair[1])throw Error('共有ステータスの形式が不正です');}
+ for(const [id,value] of Object.entries(data.questClears)){const iso=typeof value==='string'?value:value?.toDate?.().toISOString();if(!iso||!Number.isFinite(Date.parse(iso)))throw Error('達成時刻の形式が不正です');out.questClears[id]=iso;}
+ return out;
+}
+
+
+
+
+function createCloudClient({sdkLoader=loadFirebaseSDK,now=()=>Date.now()}={}){
+ let sdk,auth,db,ref,unsubDoc=null,unsubAuth=null,generation=0;
+ let session={status:'unconfigured',user:null,player:null,message:'',missing:firebaseSetupIssues()},shared=null;
+ const listeners=new Set();
+ const notify=()=>listeners.forEach(fn=>fn());
+ function reset(status,message='',user=null,player=null){generation++;unsubDoc?.();unsubDoc=null;shared=null;session={...session,status,message,user,player};notify();}
+ function fail(error){reset(error.code==='permission-denied'?'denied':'error',friendlyError(error),session.user,session.player);}
+ return {
+  get session(){return session;},get shared(){return shared;},lastSharedChange:false,
+  subscribe(fn){listeners.add(fn);return ()=>listeners.delete(fn);},
+  async start(){
+   if(unsubAuth)return;if(typeof location!=='undefined'&&location.protocol==='file:'){reset('unconfigured','GoogleログインにはHTTP/HTTPSが必要です。npm run devで開くか、Firebase Hostingで確認してください。');return;}
+   // Even without UIDs, allow Google sign-in to display the UID for setup; no Firestore read starts.
+   const configMissing=session.missing.filter(x=>x.startsWith('firebaseConfig.'));
+   if(configMissing.length){reset('unconfigured','FirebaseのWeb設定が不足しています');return;}
+   try{
+    sdk=await sdkLoader();const app=sdk.initializeApp(firebaseConfig);auth=sdk.getAuth(app);db=sdk.getFirestore(app);ref=sdk.doc(db,sharedDocumentPath);
+    unsubAuth=sdk.onAuthStateChanged(auth,user=>{
+     reset(user?'loading':'signed-out','',user);
+     if(!user)return;
+     const issues=firebaseSetupIssues();
+     const player=Object.entries(allowedUsers).find(([,uid])=>uid&&uid===user.uid)?.[0];
+     if(issues.length||!player){reset('unauthorized',issues.length?'許可UIDが未登録です。表示されたUIDを設定してください。':'このGoogleアカウントには共有データの利用許可がありません。',user);return;}
+     reset('loading','共有データを読み込んでいます',user,player);const token=generation;
+     unsubDoc=sdk.onSnapshot(ref,snapshot=>{if(token!==generation||snapshot.metadata?.fromCache)return;try{shared=snapshot.exists()?decodeShared(snapshot.data()):null;session={...session,status:shared?'ready':'missing',message:shared?'同期済み':'共有データはまだ作成されていません。既存の別パスのデータは移行しません。'};notify();}catch(error){fail(error);}},error=>{if(token===generation)fail(error);});
+    });
+    await sdk.getRedirectResult(auth);
+   }catch(error){fail(error);}
+  },
+  async login(){if(!auth)throw Error('ログインの準備ができていません。接続とWeb設定を確認して再読み込みしてください');try{await sdk.signInWithPopup(auth,new sdk.GoogleAuthProvider());}catch(error){session={...session,message:friendlyError(error)};notify();throw Error(session.message);}},
+  async logout(){reset('signed-out');if(auth)await sdk.signOut(auth);},
+  async create(){
+   if(!auth?.currentUser||!session.player||session.status!=='missing')throw Error('許可されたアカウントでログインしてください');
+   const uid=auth.currentUser.uid;await sdk.runTransaction(db,async tx=>{const doc=await tx.get(ref);if(doc.exists())throw Error('共有データが既に存在します。上書きしません。');tx.set(ref,{...initialShared(uid),updatedAt:sdk.serverTimestamp()});});
+  },
+  async transact(before,proposed){
+   this.lastSharedChange=false;
+   if(session.status!=='ready'||!auth.currentUser)throw Error('共有データへの接続・権限を確認してください');
+   const uid=auth.currentUser.uid,player=session.player,token=generation,command=detectCommand(before,proposed,player);if(!command)return shared;
+   const result=await sdk.runTransaction(db,async tx=>{
+    if(token!==generation||auth.currentUser?.uid!==uid)throw Error('ログイン状態が変更されました');
+    const snapshot=await tx.get(ref);if(!snapshot.exists())throw Error('共有データが存在しません。自動再作成はしません。');
+    const raw=snapshot.data(),current={...fresh(),...decodeShared(raw)},next=executeCommand(current,command,player,now());
+    if(JSON.stringify(extractShared(current))===JSON.stringify(extractShared(next)))return {shared:decodeShared(raw),changed:false};
+    const data={...extractShared(next),schemaVersion:1,revision:raw.revision+1,lastOperation:{...command,actor:uid},updatedAt:sdk.serverTimestamp()};
+    if(command.kind==='status')delete data.lastOperation.values;
+    // Keep server timestamps as timestamps in Firestore; use ISO strings only in the UI model.
+    data.questClears={...raw.questClears};if(command.kind==='quest')data.questClears[command.id]=sdk.serverTimestamp();
+    tx.set(ref,data);return {shared:extractShared(next),changed:true};
+   });
+   if(token!==generation||auth.currentUser?.uid!==uid)throw Error('ログイン状態が変更されました');
+   this.lastSharedChange=result.changed;shared=result.shared;return shared;
+  }
+ };
+}
+export async function loadFirebaseSDK(){
+ const [app,auth,store]=await Promise.all([
+  import('https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js'),
+  import('https://www.gstatic.com/firebasejs/11.10.0/firebase-auth.js'),
+  import('https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js')
+ ]);return {...app,...auth,...store};
+}
+function friendlyError(error){
+ return ({'auth/popup-blocked':'ポップアップがブロックされました。ブラウザで許可し、もう一度ログインしてください。','auth/popup-closed-by-user':'ログインを中断しました。','auth/unauthorized-domain':'このサイトのドメインをFirebase Authenticationの承認済みドメインへ追加してください。','auth/operation-not-allowed':'Firebase ConsoleでGoogleログインを有効にしてください。','auth/network-request-failed':'通信に失敗しました。ネットワークを確認してください。','permission-denied':'Firestoreの権限がありません。2人のUIDとデプロイ済みルールを確認してください。','unavailable':'共有サーバーへ接続できません。接続回復後に再読み込みしてください。'})[error.code]||error.message||'Firebaseに接続できませんでした。';
+}
+
+
+
+
+const LOCAL_KEY='reward-quest-local-v3';
+const LEGACY_KEY='reward-quest-v1';
+const localKeys=['items','motion','seen','ack','plan'];
+const viewRole=search=>new URLSearchParams(search).get('role')==='bride'?'bride':'groom';
+function createRepository({storage=localStorage,search=()=>location.search,cloud=createCloudClient()}={}){
+ let queue=Promise.resolve();
+ function preferences(){
+  const current=storage.getItem(LOCAL_KEY);if(current)return JSON.parse(current);
+  const old=storage.getItem(LEGACY_KEY);if(!old)return {};
+  const legacy=migrate(JSON.parse(old));const prefs=Object.fromEntries(localKeys.filter(k=>legacy[k]!==undefined).map(k=>[k,legacy[k]]));
+  storage.setItem(LOCAL_KEY,JSON.stringify(prefs));
+  // Old numerical game data remains as a backup, but per-device image blobs are retired.
+  if(legacy.images){delete legacy.images;storage.setItem(LEGACY_KEY,JSON.stringify(legacy));}
+  return prefs;
+ }
+ return {
+  cloud,get session(){return cloud.session;},get lastSharedChange(){return cloud.lastSharedChange;},
+  load(){const result={...fresh(),...preferences(),role:viewRole(search())};if(cloud.session.status==='ready')Object.assign(result,extractShared(cloud.shared));return result;},
+  subscribe(fn){return cloud.subscribe(fn);},start(){return cloud.start();},login(){return cloud.login();},logout(){return cloud.logout();},createShared(){return cloud.create();},
+  legacyBackup(){const raw=storage.getItem(LEGACY_KEY);if(!raw)return null;const data=JSON.parse(raw);delete data.images;return data;},
+  async transact(fn){
+   const run=async()=>{
+    const before=this.load(),next=fn(structuredClone(before));
+    if(next.images)throw Error('画像はassetsから読み込みます。端末には保存しません。');
+    if(JSON.stringify(extractShared(before))!==JSON.stringify(extractShared(next)))await cloud.transact(before,next);
+    const prefs=Object.fromEntries(localKeys.map(k=>[k,next[k]]));storage.setItem(LOCAL_KEY,JSON.stringify(prefs));return this.load();
+   };
+   const serialized=()=>{const task=queue.then(run,run);queue=task.catch(()=>{});return task;};
+   if(typeof navigator!=='undefined'&&navigator.locks)return navigator.locks.request(LOCAL_KEY,serialized);
+   return serialized();
+  }
+ };
+}
+const repository=createRepository();
 
 // Static transparent PNGs. A text fallback is shown only on an image load error.
 const characterAssets={groom:'data:image/png;base64,',bride:'data:image/png;base64,'};
-function configureCharacters(images={}){characterAssets.groom=images.groom||'data:image/png;base64,';characterAssets.bride=images.bride||'data:image/png;base64,';}
 function sprite(role){const label=role==='bride'?'新婦':'新郎';return `<span class="character sprite ${role}"><img data-character="${role}" src="${characterAssets[role]}" alt="${label}" decoding="async"><span class="character-fallback" hidden>${label}<small>画像を読み込めません</small></span></span>`;}
 const pair=()=>`<div class="couple">${sprite('groom')}<span class="heart">♥</span>${sprite('bride')}</div>`;
 function landscape(){return `<div class="landscape"><span class="sun"></span><span class="cloud c1"></span><span class="cloud c2"></span><div class="mount m1"></div><div class="mount m2"></div><div class="mount m3"></div><div class="castle">▥<br>▦ ▦<br>▥</div><div class="trail"></div><span class="tree t1">♠</span><span class="tree t2">♠</span><span class="flowers">✿ · ✿</span>${pair()}<span class="spark s1">✦</span><span class="spark s2">✦</span></div>`;}
@@ -715,21 +872,25 @@ function icon(name){const paths={home:'M2 8h2V6h2V4h4v2h2v2h2v6H9v-4H7v4H2z',que
 
 
 
-let state,storageError='';
-try{state=repository.load();}catch(e){state=fresh();storageError=e.message;}
-configureSchedule(state.plan);configureCharacters(state.images);
+
+let state,storageError='',localLoadFailed=false;
+try{state=repository.load();}catch(e){state=fresh();localLoadFailed=true;storageError=e.message;}
+configureSchedule(state.plan);
 let completing=false,lastRenderedPage=null;
 const pendingItems=new Map();
 let page='home',selectedDay=1,preview=null,previewStarted=0,opening=false,scene=0,timers=[],activeNotice=null,recordDate=null;
 const navIcon=icon;
 const app=document.querySelector('#app');
+const sharedReady=()=>repository.session.status==='ready'&&!localLoadFailed;
+const myRole=()=>repository.session.player||state.role;
+const myNotifications=()=>notifications({...state,role:myRole()},now());
 const now=()=>preview===null?Date.now():preview+Date.now()-previewStarted;
 const reduced=()=>!state.motion||matchMedia('(prefers-reduced-motion: reduce)').matches;
 const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 function toast(s){const el=document.querySelector('#toast');el.textContent=s;el.classList.add('show');setTimeout(()=>el.classList.remove('show'),4000);}
 async function update(fn,{redraw=true}={}){
- try{state=await repository.transact(fn);configureSchedule(state.plan);configureCharacters(state.images);storageError='';if(redraw)render();else showSaveError('');return true;}
- catch(e){storageError=e.message==='旅程の編集は新婦モードで行ってください'?e.message:'保存できません。ブラウザの保存設定・空き容量、入力内容をご確認ください。';if(redraw)render();else showSaveError(storageError);toast(storageError);return false;}
+ try{state=await repository.transact(fn);localLoadFailed=false;configureSchedule(state.plan);storageError='';if(redraw)render();else showSaveError('');return true;}
+ catch(e){storageError=e.name==='QuotaExceededError'?'保存できません。ブラウザの空き容量を確認してください。':e.code?friendlyError(e):e.message||'保存できません。入力内容・接続を確認してください。';if(redraw)render();else showSaveError(storageError);toast(storageError);return false;}
 }
 function showSaveError(message){const el=document.querySelector('#save-error');if(el){el.textContent=message;el.hidden=!message;}}
 function refreshItemUI(){const selected=new Set(state.items);for(const [id,checked] of pendingItems)checked?selected.add(id):selected.delete(id);for(const input of document.querySelectorAll('[data-item]'))input.checked=selected.has(+input.dataset.item);const count=document.querySelector('#item-count');if(count)count.textContent=`${selected.size} / ${items.length}`;}
@@ -739,7 +900,7 @@ async function saveItem(input){const id=+input.dataset.item,checked=input.checke
 }
 function refreshOverlay(){document.querySelectorAll('dialog').forEach(d=>d.remove());if(activeNotice)drawNotice();}
 const bar=(key,value)=>`<div class="statline"><span>${labels[key]}</span><b>${value[0]} <small>/ ${value[1]}</small></b><div class="track"><i class="${key}" style="width:${100*value[0]/value[1]}%"></i></div></div>`;
-const players=()=>`<div class="players">${['groom','bride'].map(r=>`<article class="player"><header>${sprite(r)}<div><span class="eyebrow">PLAYER ${r==='groom'?'01':'02'}</span><h3>${r==='groom'?'新郎':'新婦'}<small> Lv.${1+state.done.length}</small></h3></div></header>${Object.entries(state.players[r]).map(([k,v])=>bar(k,v)).join('')}</article>`).join('')}</div>`;
+const players=()=>!sharedReady()?authPanel():`<div class="players">${['groom','bride'].map(r=>`<article class="player"><header>${sprite(r)}<div><span class="eyebrow">PLAYER ${r==='groom'?'01':'02'}</span><h3>${r==='groom'?'新郎':'新婦'}<small> Lv.${1+state.done.length}</small></h3></div></header>${Object.entries(state.players[r]).map(([k,v])=>bar(k,v)).join('')}</article>`).join('')}</div>`;
 const formatDate=t=>new Intl.DateTimeFormat('ja-JP',{timeZone:'Asia/Tokyo',month:'long',day:'numeric',weekday:'short'}).format(t);
 function remaining(t){const s=Math.max(0,Math.ceil((t-now())/1000));return `${Math.floor(s/3600)}時間 ${String(Math.floor(s/60)%60).padStart(2,'0')}分 ${String(s%60).padStart(2,'0')}秒`;}
 function busWarning(){const bus=returnBus(),target=returnTarget();if(tokyoDate(now())!==dates[1]||now()>Date.parse(bus.at)+60000)return '';
@@ -748,41 +909,42 @@ function busWarning(){const bus=returnBus(),target=returnTarget();if(tokyoDate(n
 }
 function nextCard(){const a=nextAction(now());return `<section class="next-action" id="next-action"><span class="eyebrow">▶ NEXT ACTION</span><h2>${a?`${a.time} ${esc(actionText(a,state.role,now()))}`:'次の行動はありません'}</h2><p>${a?`DAY ${a.day} / ${formatDate(Date.parse(a.at))} · 要確認`:'ふたりの冒険を、しおりで振り返ろう。'}</p>${a?`<div class="timer">次の行動まであと <b id="countdown">${remaining(Date.parse(a.at))}</b></div>`:''}${busWarning()}<button class="primary" data-today="${a?.day||tripDay(now())}">今日のスケジュールを見る →</button></section>`;}
 function busControls(){return `<section class="itinerary-controls"><h2>バスの候補を選ぶ</h2><p>第一候補14:20発→14:29着／代替15:10発→15:19着。乗り換え5分で間に合わないときは代替便へ。</p><div class="tabs"><button data-bus="early" aria-pressed="${state.plan?.bus!=='late'}">14:20発</button><button data-bus="late" aria-pressed="${state.plan?.bus==='late'}">15:10発</button></div><p>この端末の行程・NEXT ACTION・公開時刻を更新します。</p></section>`;}
-function home(){return `<section class="hero"><span class="eyebrow">THE NEXT CHAPTER OF OUR STORY</span><h1>結婚式お疲れ様旅行</h1><p class="subtitle">クリア後のごほうびクエスト</p><div class="datepill">2026.10.31 — 11.02 / ${state.role==='bride'?'新婦':'新郎'}</div>${landscape()}<div class="message"><span class="message-label">♥ ふたりの冒険、ふたたび。</span><p>メインクエスト、おつかれさま！<br>食べて、休んで、幸せをレベルアップ。</p><span class="triangle">▼</span></div></section>${nextCard()}<div class="sectionhead"><h2>PARTY STATUS</h2><button data-page="status" class="textbtn">くわしく →</button></div>${players()}<div class="sectionhead"><h2>冒険のあしあと</h2><span class="badge">${Object.keys(state.questClears).length} / ${quests.length} CLEAR</span></div><button class="secondary" data-page="quest">⚑ 3日間の冒険のしおり</button><p class="footnote">旅のしおり / ${formatDate(now())} / JST</p>`;}
-function quest(){return `<div class="pageheading"><span class="eyebrow">ADVENTURE ITINERARY</span><h1>冒険のしおり</h1><p>時刻をたどって、ふたりの旅へ。</p></div><div class="tabs">${[1,2,3].map(d=>`<button data-day="${d}" aria-pressed="${selectedDay===d}">DAY ${d}<small>${['10/31','11/1','11/2'][d-1]}</small></button>`).join('')}</div><h2>${themes[selectedDay-1]}</h2><p class="notice">現在の旅行計画です。交通時刻は要確認。<br>${state.role==='bride'?'新婦：すべての詳細を表示・編集できます。':'新郎：未訪問の場所名を伏せています。移動時刻は先に確認できます。'}</p>${selectedDay===2?busControls()+busWarning():''}${quests.filter(q=>q.day===selectedDay).map(q=>{const st=questState(state,q,now());return `<article class="quest-block ${st}"><header><span class="eyebrow">QUEST ${String(quests.filter(x=>x.day===q.day).indexOf(q)+1).padStart(2,'0')}</span><span class="badge">${st==='clear'?'✓ QUEST CLEAR!':st==='open'?'解放済み':'▣ 未解放'}</span></header><h2>${esc(questTitle(q,state.role,now()))}</h2>${state.role==='bride'?`<p class="notice">情報解放 ${q.revealAt.slice(11,16)} / 日本時間</p>`:''}<ol class="schedule">${q.actionIds.map(id=>actions.find(a=>a.id===id)).sort((a,b)=>Date.parse(a.at)-Date.parse(b.at)).map(a=>`<li class="${Date.parse(a.at)<=now()?'past':''}"><time>${a.time}</time><div><strong>${esc(actionText(a,state.role,now()))}</strong><small>${esc(actionNote(a,state.role,now()))}</small></div>${state.role==='bride'?`<button class="edit-row" data-edit-action="${a.id}">編集</button>`:''}</li>`).join('')}</ol>${state.role==='bride'?`<button class="secondary" data-edit-quest="${q.id}">クエスト名・解放時刻を編集</button>`:''}${!q.actionIds.length?'<p>長い冒険を終えたふたりへ。おつかれさま！</p>':''}${st==='clear'?`<p class="clear-record">✓ 達成記録：${formatDate(Date.parse(state.questClears[q.id]))}</p>`:st==='open'?`<button class="primary" data-clear="${q.id}">${q.final?'冒険の達成を記録！':'到着した！ / 達成した！'}</button>`:'<p class="notice">訪問予定時刻になると場所名が解放されます。<br>解放と達成は別々です。達成はボタンで記録します。</p>'}</article>`;}).join('')}`;}
+function home(){return `<section class="hero"><span class="eyebrow">THE NEXT CHAPTER OF OUR STORY</span><h1>結婚式お疲れ様旅行</h1><p class="subtitle">クリア後のごほうびクエスト</p><div class="datepill">2026.10.31 — 11.02 / ${state.role==='bride'?'新婦':'新郎'}</div>${landscape()}<div class="message"><span class="message-label">♥ ふたりの冒険、ふたたび。</span><p>メインクエスト、おつかれさま！<br>食べて、休んで、幸せをレベルアップ。</p><span class="triangle">▼</span></div></section>${nextCard()}<div class="sectionhead"><h2>PARTY STATUS</h2><button data-page="status" class="textbtn">くわしく →</button></div>${players()}<div class="sectionhead"><h2>冒険のあしあと</h2><span class="badge">${sharedReady()?Object.keys(state.questClears).length:'—'} / ${quests.length} CLEAR</span></div><button class="secondary" data-page="quest">⚑ 3日間の冒険のしおり</button><p class="footnote">旅のしおり / ${formatDate(now())} / JST</p>`;}
+function quest(){return `<div class="pageheading"><span class="eyebrow">ADVENTURE ITINERARY</span><h1>冒険のしおり</h1><p>時刻をたどって、ふたりの旅へ。</p></div><div class="tabs">${[1,2,3].map(d=>`<button data-day="${d}" aria-pressed="${selectedDay===d}">DAY ${d}<small>${['10/31','11/1','11/2'][d-1]}</small></button>`).join('')}</div><h2>${themes[selectedDay-1]}</h2><p class="notice">現在の旅行計画です。交通時刻は要確認。<br>${state.role==='bride'?'新婦：すべての詳細を表示・編集できます。':'新郎：未訪問の場所名を伏せています。移動時刻は先に確認できます。'}</p>${selectedDay===2?busControls()+busWarning():''}${quests.filter(q=>q.day===selectedDay).map(q=>{const st=questState(state,q,now());return `<article class="quest-block ${st}"><header><span class="eyebrow">QUEST ${String(quests.filter(x=>x.day===q.day).indexOf(q)+1).padStart(2,'0')}</span><span class="badge">${st==='clear'?'✓ QUEST CLEAR!':st==='open'?'解放済み':'▣ 未解放'}</span></header><h2>${esc(questTitle(q,state.role,now()))}</h2>${state.role==='bride'?`<p class="notice">情報解放 ${q.revealAt.slice(11,16)} / 日本時間</p>`:''}<ol class="schedule">${q.actionIds.map(id=>actions.find(a=>a.id===id)).sort((a,b)=>Date.parse(a.at)-Date.parse(b.at)).map(a=>`<li class="${Date.parse(a.at)<=now()?'past':''}"><time>${a.time}</time><div><strong>${esc(actionText(a,state.role,now()))}</strong><small>${esc(actionNote(a,state.role,now()))}</small></div>${state.role==='bride'?`<button class="edit-row" data-edit-action="${a.id}">編集</button>`:''}</li>`).join('')}</ol>${state.role==='bride'?`<button class="secondary" data-edit-quest="${q.id}">クエスト名・解放時刻を編集</button>`:''}${!q.actionIds.length?'<p>長い冒険を終えたふたりへ。おつかれさま！</p>':''}${st==='clear'?`<p class="clear-record">✓ 達成記録：${formatDate(Date.parse(state.questClears[q.id]))}</p>`:st==='open'&&sharedReady()?`<button class="primary" data-clear="${q.id}">${q.final?'冒険の達成を記録！':'到着した！ / 達成した！'}</button>`:'<p class="notice">訪問予定時刻になると場所名が解放されます。<br>解放と達成は別々です。達成はボタンで記録します。</p>'}</article>`;}).join('')}`;}
 function eligibleDates(){return statusPrompts.filter(p=>Date.parse(p.at)<=now()).map(p=>p.date);}
-function status(){const available=recoveryEvents.filter(e=>Date.parse(e.availableAt)<=now());const eligible=eligibleDates();return `<div class="pageheading"><span class="eyebrow">PARTY & RECOVERY</span><h1>ふたりのステータス</h1><p>休むたびに、冒険の器が大きくなる。</p></div>${players()}<h2>回復イベント</h2><p class="notice">時刻になるとイベントが届きます。「あとで」のイベントもここから達成できます。</p><div class="events">${available.map(e=>{const effect=eventEffect(e),done=state.done.includes(e.id);return `<button data-event="${e.id}" ${done?'disabled':''}><span class="eventicon">${effect.icon}</span><span><small>DAY ${e.day} / ${e.availableAt.slice(11,16)}</small><strong>${effect.name}</strong><small>${effectDescription(effect)}</small></span><b>${done?'✓':'＋'}</b></button>`;}).join('')||'<div class="panel">まだ回復イベントはありません。旅の時間をお楽しみに。</div>'}</div><div class="panel"><span class="eyebrow">TODAY’S STATUS</span><h2>今日の冒険はどうだった？</h2><p>DAY1・2は21時から入力できます。最終日は15時から、帰宅後や後日も記録できます。</p>${eligible.length?`<label>記録する日<select id="record-date">${eligible.map(date=>`<option ${date===(recordDate||eligible.at(-1))?'selected':''}>${date}</option>`).join('')}</select></label><button class="primary" id="open-record">${state.role==='groom'?'新郎':'新婦'}のステータスを記録</button>`:'<p class="notice">夜になったら、入力をご案内します。</p>'}</div><h2>保存した夜の記録</h2>${Object.entries(state.logs).map(([key,v])=>`<div class="log-entry"><b>${esc(key.replace(':groom',' 新郎').replace(':bride',' 新婦'))}</b><p>${Object.entries(v).map(([k,n])=>`${labels[k]} ${n}`).join(' / ')}</p></div>`).join('')||'<p class="notice">まだ記録はありません。</p>'}`;}
+function status(){if(!sharedReady())return `<div class="pageheading"><span class="eyebrow">PARTY STATUS</span><h1>ふたりのステータス</h1></div>${authPanel()}`;const available=recoveryEvents.filter(e=>Date.parse(e.availableAt)<=now());const eligible=eligibleDates();return `<div class="pageheading"><span class="eyebrow">PARTY & RECOVERY</span><h1>ふたりのステータス</h1><p>休むたびに、冒険の器が大きくなる。</p></div>${players()}<h2>回復イベント</h2><p class="notice">時刻になるとイベントが届きます。「あとで」のイベントもここから達成できます。</p><div class="events">${available.map(e=>{const effect=eventEffect(e),done=state.done.includes(e.id);return `<button data-event="${e.id}" ${done?'disabled':''}><span class="eventicon">${effect.icon}</span><span><small>DAY ${e.day} / ${e.availableAt.slice(11,16)}</small><strong>${effect.name}</strong><small>${effectDescription(effect)}</small></span><b>${done?'✓':'＋'}</b></button>`;}).join('')||'<div class="panel">まだ回復イベントはありません。旅の時間をお楽しみに。</div>'}</div><div class="panel"><span class="eyebrow">TODAY’S STATUS</span><h2>今日の冒険はどうだった？</h2><p>DAY1・2は21時から入力できます。最終日は15時から、帰宅後や後日も記録できます。</p>${eligible.length?`<label>記録する日<select id="record-date">${eligible.map(date=>`<option ${date===(recordDate||eligible.at(-1))?'selected':''}>${date}</option>`).join('')}</select></label><button class="primary" id="open-record">${myRole()==='groom'?'新郎':'新婦'}のステータスを記録</button>`:'<p class="notice">夜になったら、入力をご案内します。</p>'}</div><h2>保存した夜の記録</h2>${Object.entries(state.logs).map(([key,v])=>`<div class="log-entry"><b>${esc(key.replace(':groom',' 新郎').replace(':bride',' 新婦'))}</b><p>${Object.entries(v).map(([k,n])=>`${labels[k]} ${n}`).join(' / ')}</p></div>`).join('')||'<p class="notice">まだ記録はありません。</p>'}`;}
 const effectDescription=e=>[...Object.entries(e.max).map(([k,v])=>`最大${labels[k]} +${v}`),...Object.entries(e.current).map(([k,v])=>`${labels[k]} ${v>0?'+':''}${v}`)].join(' / ');
 function item(){return `<div class="pageheading"><span class="eyebrow">ADVENTURE BAG</span><h1>旅のどうぐ</h1><p>忘れものをチェックして出発！</p></div><div class="panel green"><h2>防寒そうびを忘れずに</h2><p>標高の高い場所は秋の終わりに冷え込みます。重ね着・防寒小物・歩きやすい靴を準備しよう。</p></div><div class="sectionhead"><h2>持ち物</h2><span class="badge" id="item-count" aria-live="polite">${state.items.length} / ${items.length}</span></div><div class="checklist">${items.map((s,i)=>`<label><input type="checkbox" data-item="${i}" ${state.items.includes(i)?'checked':''}><span>${s}</span></label>`).join('')}</div><div class="panel"><h2>冒険の心得</h2><p>体調をいちばん大切に。<br>水分補給とこまめな休憩。<br>無理せず、ふたりのペースで。</p></div>`;}
-function settings(){return `<div class="pageheading"><span class="eyebrow">SYSTEM MENU</span><h1>冒険の設定</h1></div><div class="panel"><h2>プレイヤー表示</h2><p>新婦は全情報の閲覧・編集、新郎は未訪問の場所名を伏せて表示します。ログインは使用しません。</p><div class="tabs">${['groom','bride'].map(r=>`<button data-role="${r}" aria-pressed="${state.role===r}">${r==='groom'?'新郎':'新婦'}</button>`).join('')}</div></div><div class="panel"><h2>キャラクター画像</h2><p>お手元の透過PNGを選ぶと、そのまま全画面へ適用してこの端末に保存します。</p><label class="editor-label">新婦のPNG<input type="file" accept="image/png" data-character-file="bride"></label><label class="editor-label">新郎のPNG<input type="file" accept="image/png" data-character-file="groom"></label><p class="notice">画像選択は端末ごとに必要です。PNGの内容は加工しません。</p></div><div class="panel"><h2>演出</h2><label class="toggle"><input id="motion" type="checkbox" ${state.motion?'checked':''}>アニメーションを使う</label><button id="replay" class="secondary">22秒のオープニングを再視聴</button></div><div class="panel"><h2>保存状態</h2><p>${esc(storageError||'この端末に保存中')}<br>保存はこの端末だけです。相手の端末とは同期しません。</p><button id="export" class="secondary">バックアップをダウンロード</button></div><div class="panel"><h2>デモ日時（日本時間）</h2><p>変更した時刻から秒針が進みます。巻き戻しても達成と確認済み通知は保持されます。</p><input id="clock" type="datetime-local" value="${new Date(now()+32400000).toISOString().slice(0,16)}"><button id="setclock" class="primary">この時刻で冒険する</button><button id="realclock" class="secondary">現在の時刻に戻す</button></div>`;}
-function render(){configureSchedule(state.plan);configureCharacters(state.images);document.body.classList.toggle('reduced',reduced());app.innerHTML=`<div class="shell"><header class="topbar"><a href="#home" data-page="home" class="brand">♥ <span>REWARD QUEST</span></a><span class="topright">${preview===null?'LOCAL SAVE':'DEMO TIME'} <i>●</i></span></header><div id="save-error" role="alert" class="error" ${storageError?'':'hidden'}>${esc(storageError)}</div><main id="main" class="${lastRenderedPage===page?'no-transition':''}">${({home,quest,status,item,settings})[page]()}</main><nav aria-label="メインメニュー">${[['home','⌂','HOME'],['quest','⚑','QUEST'],['status','♡','STATUS'],['item','▣','ITEM'],['settings','⚙','SYSTEM']].map(([id,icon,name])=>`<button data-page="${id}" ${page===id?'aria-current="page"':''}><span>${navIcon(id)}</span><small>${name}</small></button>`).join('')}</nav></div>`;lastRenderedPage=page;if(opening)drawOpening();else if(activeNotice)drawNotice();}
+function settings(){return `<div class="pageheading"><span class="eyebrow">SYSTEM MENU</span><h1>冒険の設定</h1></div>${authPanel()}<div class="panel"><h2>表示モード</h2><p>${state.role==='bride'?'新婦用：すべての旅程を表示':'新郎用：未訪問の場所名を伏せて表示'}。URLのroleは表示だけに使用し、Googleアカウントの権限とは別です。</p><p class="notice">?role=bride / ?role=groom（省略時は新郎）</p></div><div class="panel"><h2>演出</h2><label class="toggle"><input id="motion" type="checkbox" ${state.motion?'checked':''}>アニメーションを使う</label><button id="replay" class="secondary">22秒のオープニングを再視聴</button></div><div class="panel"><h2>保存状態</h2><p>${esc(storageError||'この端末に保存中')}<br>持ち物・演出・旅程編集はこの端末だけ。ステータスと達成はログイン後に共有します。</p><button id="export" class="secondary">バックアップをダウンロード</button></div><div class="panel"><h2>表示確認用のデモ日時（日本時間）</h2><p>表示だけを早送りします。共有報酬・達成の時刻は実際の時刻とFirestore Rulesで判定するため、未来の報酬は受け取れません。</p><input id="clock" type="datetime-local" value="${new Date(now()+32400000).toISOString().slice(0,16)}"><button id="setclock" class="primary">この時刻で冒険する</button><button id="realclock" class="secondary">現在の時刻に戻す</button></div>`;}
+function render(){configureSchedule(state.plan);document.body.classList.toggle('reduced',reduced());app.innerHTML=`<div class="shell"><header class="topbar"><a href="#home" data-page="home" class="brand">♥ <span>REWARD QUEST</span></a><span class="topright">${preview===null?'FIREBASE':'DEMO TIME'} <i>●</i></span></header><div id="save-error" role="alert" class="error" ${storageError?'':'hidden'}>${esc(storageError)}</div><main id="main" class="${lastRenderedPage===page?'no-transition':''}">${({home,quest,status,item,settings})[page]()}</main><nav aria-label="メインメニュー">${[['home','⌂','HOME'],['quest','⚑','QUEST'],['status','♡','STATUS'],['item','▣','ITEM'],['settings','⚙','SYSTEM']].map(([id,icon,name])=>`<button data-page="${id}" ${page===id?'aria-current="page"':''}><span>${navIcon(id)}</span><small>${name}</small></button>`).join('')}</nav></div>`;lastRenderedPage=page;if(opening)drawOpening();else if(activeNotice)drawNotice();}
 function showModal(content,label){const d=document.createElement('dialog');d.className='game-dialog';d.setAttribute('aria-label',label);d.innerHTML=content;d.addEventListener('cancel',e=>{e.preventDefault();if(activeNotice?.notification)ackNotice();else closeModal();});app.append(d);d.showModal();return d;}
-function drawNotice(){const n=activeNotice;if(n.type==='level'){drawGrowth(n);return;}if(n.type==='edit'){drawEditor(n);return;}if(n.type==='record'){const date=n.ref,role=state.role,saved=state.logs[`${date}:${role}`];showModal(`<form id="daily"><span class="eyebrow">TODAY’S STATUS / ${date}</span><h2>今日の冒険はどうだった？</h2><p>${role==='groom'?'新郎':'新婦'}の現在値を入力</p>${Object.entries(state.players[role]).map(([k,v])=>`<label class="sliderlabel">${labels[k]} <output id="out-${k}">${saved?.[k]??v[0]}</output><input name="${k}" type="range" min="0" max="${v[1]}" value="${saved?.[k]??v[0]}"></label>`).join('')}<p class="notice">保存すると現在のステータスにも反映します。</p><button class="primary" type="submit">記録を保存する</button><button class="secondary" type="button" data-dismiss>あとで</button></form>`,'ステータス入力');return;}let buttons='';if(n.type==='event')buttons=`<button class="primary" data-event="${n.ref}">達成した！</button>`;if(n.type==='status')buttons=`<button class="primary" id="notice-record">入力する</button>`;if(n.type==='quest'||n.type==='final')buttons=`<button class="primary" id="notice-quest">しおりを見る</button>`;showModal(`<div class="popup-art">${n.type==='level'?'✦':n.type==='final'?'★':'⚑'}</div><span class="eyebrow">${esc(n.title)}</span><h2>${esc(n.ref&&['quest','final'].includes(n.type)?questTitle(quests.find(q=>q.id===n.ref),state.role,now()):n.text)}</h2>${n.type==='event'?`<p class="notice">${effectDescription(eventEffect(recoveryEvents.find(e=>e.id===n.ref)))}</p>`:''}${n.type==='final'?'<p>おつかれさま！達成はしおりのボタンで記録しよう。最終日のステータスも保存できます。</p>':''}${buttons}<button class="secondary" data-dismiss>${n.type==='event'||n.type==='status'?'あとで':'とじる'}</button><small class="notice">${n.notification?`未確認のお知らせ ${notifications(state,now()).length}件 / 確認後は再表示しません`:''}</small>`,n.title);}
+function drawNotice(){const n=activeNotice;if(n.type==='level'){drawGrowth(n);return;}if(n.type==='edit'){drawEditor(n);return;}if(n.type==='record'){const date=n.ref,role=myRole(),saved=state.logs[`${date}:${role}`];showModal(`<form id="daily"><span class="eyebrow">TODAY’S STATUS / ${date}</span><h2>今日の冒険はどうだった？</h2><p>${role==='groom'?'新郎':'新婦'}の現在値を入力</p>${Object.entries(state.players[role]).map(([k,v])=>`<label class="sliderlabel">${labels[k]} <output id="out-${k}">${saved?.[k]??v[0]}</output><input name="${k}" type="range" min="0" max="${v[1]}" value="${saved?.[k]??v[0]}"></label>`).join('')}<p class="notice">保存すると現在のステータスにも反映します。</p><button class="primary" type="submit">記録を保存する</button><button class="secondary" type="button" data-dismiss>あとで</button></form>`,'ステータス入力');return;}let buttons='';if(n.type==='event')buttons=`<button class="primary" data-event="${n.ref}">達成した！</button>`;if(n.type==='status')buttons=`<button class="primary" id="notice-record">入力する</button>`;if(n.type==='quest'||n.type==='final')buttons=`<button class="primary" id="notice-quest">しおりを見る</button>`;showModal(`<div class="popup-art">${n.type==='level'?'✦':n.type==='final'?'★':'⚑'}</div><span class="eyebrow">${esc(n.title)}</span><h2>${esc(n.ref&&['quest','final'].includes(n.type)?questTitle(quests.find(q=>q.id===n.ref),state.role,now()):n.text)}</h2>${n.type==='event'?`<p class="notice">${effectDescription(eventEffect(recoveryEvents.find(e=>e.id===n.ref)))}</p>`:''}${n.type==='final'?'<p>おつかれさま！達成はしおりのボタンで記録しよう。最終日のステータスも保存できます。</p>':''}${buttons}<button class="secondary" data-dismiss>${n.type==='event'||n.type==='status'?'あとで':'とじる'}</button><small class="notice">${n.notification?`未確認のお知らせ ${myNotifications().length}件 / 確認後は再表示しません`:''}</small>`,n.title);}
 function closeModal(){activeNotice=null;refreshOverlay();}
-async function ackNotice(){const n=activeNotice;if(!n)return;activeNotice=null;if(n.notification)await update(s=>({...s,ack:[...new Set([...s.ack,`${s.role}:${n.id}`])]}),{redraw:false});refreshOverlay();}
-function promptPending(){if(opening||activeNotice||page==='settings'||storageError||document.hidden)return;const pending=notifications(state,now());if(pending.length){activeNotice={...pending[0],notification:true};refreshOverlay();}}
+async function ackNotice(){const n=activeNotice;if(!n)return;activeNotice=null;if(n.notification)await update(s=>({...s,ack:[...new Set([...s.ack,`${myRole()}:${n.id}`])]}),{redraw:false});refreshOverlay();}
+function promptPending(){if(!sharedReady()||opening||activeNotice||page==='settings'||storageError||document.hidden)return;const pending=myNotifications();if(pending.length){activeNotice={...pending[0],notification:true};refreshOverlay();}}
 function finishOpening(){timers.forEach(clearTimeout);timers=[];opening=false;scene=0;page='home';return update(s=>({...s,seen:true})).then(()=>setTimeout(promptPending,1200));}
 function startOpening(){timers.forEach(clearTimeout);activeNotice=null;opening=true;scene=0;render();for(const [ms,s] of [[openingTiming.homecoming,1],[openingTiming.unlock,2]])timers.push(setTimeout(()=>{scene=s;render();},ms));timers.push(setTimeout(finishOpening,openingTiming.end));}
 function drawOpening(){const overlay=document.createElement('div');overlay.className=`opening scene${scene}`;overlay.setAttribute('role','dialog');overlay.setAttribute('aria-label','冒険のプロローグ');overlay.setAttribute('aria-modal','true');overlay.innerHTML=`<button id="skip" class="skip">スキップ →</button><div class="introcontent"><span class="eyebrow">${scene===0?'2026.10.10 · WEDDING DAY':scene===1?'AFTER THE MAIN QUEST':'A NEW CHAPTER'}</span><div class="introart">${scene===0?'<div class="chapel">♧<br>▦ ▦<br>▥</div>':scene===1?'<div class="bed">▰</div>':'<div class="quest-notify">✦ NEW QUEST UNLOCKED! ✦</div>'}${pair()}${scene===0?Array.from({length:24},(_,i)=>`<i class="petal" style="--x:${i*4.2}%;--delay:${i%7*.4}s"></i>`).join(''):''}</div><h1>${scene===0?'MAIN QUEST CLEAR!':scene===1?'おうちへ帰還……':'結婚式お疲れ様旅行'}</h1><p>${scene===0?'結婚式が大成功！<br>わーい！ わーい！':scene===1?'長い冒険を終えた2人は、<br>すっかり疲れ果ててしまった……':'〜クリア後のごほうびクエスト〜'}</p>${scene===1?'<div class="intro-gauge">HP <i></i></div><div class="intro-gauge">MP <i></i></div>':''}<div class="scene-dots">${[0,1,2].map(n=>`<i class="${Math.min(scene,2)===n?'active':''}"></i>`).join('')}</div></div>`;app.append(overlay);app.querySelector('.shell').inert=true;overlay.querySelector('button').focus();}
-async function completeEvent(id){const e=recoveryEvents.find(e=>e.id===id);if(completing||!e||state.done.includes(id)||Date.parse(e.availableAt)>now())return;completing=true;let applied=false,beforePlayers=null;const pending=activeNotice;activeNotice=null;const success=await update(s=>{let n=applyEvent(s,id,now());if(n===s)return s;beforePlayers=structuredClone(s.players);applied=true;if(pending?.notification)n.ack.push(`${s.role}:${pending.id}`);return n;});completing=false;if(success&&applied){const effect=eventEffect(e);activeNotice={type:'level',title:'LEVEL UP!',text:'ふたりのステータスが大きく成長した！',growth:effect.max,before:beforePlayers,after:structuredClone(state.players)};refreshOverlay();}}
+async function completeEvent(id){const e=recoveryEvents.find(e=>e.id===id);if(completing||!e||state.done.includes(id)||Date.parse(e.availableAt)>now())return;completing=true;let applied=false,beforePlayers=null;const pending=activeNotice;activeNotice=null;const success=await update(s=>{let n=applyEvent(s,id,now());if(n===s)return s;beforePlayers=structuredClone(s.players);applied=true;if(pending?.notification)n.ack.push(`${myRole()}:${pending.id}`);return n;});completing=false;if(success&&applied&&!repository.lastSharedChange)toast('実際の時刻では未解放、または他の端末で達成済みです。');if(success&&applied&&repository.lastSharedChange){const effect=eventEffect(e);activeNotice={type:'level',title:'LEVEL UP!',text:'ふたりのステータスが大きく成長した！',growth:effect.max,before:beforePlayers,after:structuredClone(state.players)};refreshOverlay();}}
 document.addEventListener('click',async e=>{const b=e.target.closest('button,a');if(!b)return;
 if(b.dataset.page){e.preventDefault();page=b.dataset.page;render();window.scrollTo(0,0);}if(b.dataset.today){selectedDay=+b.dataset.today;page='quest';render();window.scrollTo(0,0);}if(b.dataset.day){selectedDay=+b.dataset.day;render();}
-if(b.dataset.clear){const id=b.dataset.clear;if(await update(s=>clearQuest(s,id,now())))toast('✓ QUEST CLEAR! 達成記録を保存した！');}
+if(b.dataset.clear){const id=b.dataset.clear;if(await update(s=>clearQuest(s,id,now())))toast(repository.lastSharedChange?'✓ QUEST CLEAR! 達成記録を保存した！':'実際の時刻では未解放、または他の端末で達成済みです。');}
 if(b.dataset.event)await completeEvent(b.dataset.event);
 if(b.dataset.editAction)openEditor('actions',b.dataset.editAction);if(b.dataset.editQuest)openEditor('quests',b.dataset.editQuest);if(b.dataset.bus){const y=window.scrollY;if(await update(s=>({...s,plan:{...s.plan,bus:b.dataset.bus}})))window.scrollTo(0,y);}
-if(b.dataset.role)await update(s=>({...s,role:b.dataset.role}));
-if(b.id==='replay')startOpening();if(b.id==='skip')finishOpening();
+
+if(b.id==='replay')startOpening();if(b.id==='skip')await finishOpening();
 if(b.hasAttribute('data-dismiss')){await ackNotice();}
 if(b.id==='notice-quest'){const q=quests.find(q=>q.id===activeNotice.ref);page='quest';selectedDay=q.day;await ackNotice();render();}
 if(b.id==='notice-record'){const date=activeNotice.ref;await ackNotice();activeNotice={type:'record',ref:date};refreshOverlay();}
 if(b.id==='open-record'){const date=document.querySelector('#record-date').value;activeNotice={type:'record',ref:date};refreshOverlay();}
 if(b.id==='setclock'){const value=document.querySelector('#clock').value;const t=Date.parse(value+':00+09:00');if(Number.isFinite(t)){preview=t;previewStarted=Date.now();render();toast('デモ時刻を変更しました');}}
 if(b.id==='realclock'){preview=null;render();}
-if(b.id==='export'){const url=URL.createObjectURL(new Blob([JSON.stringify(state,null,2)],{type:'application/json'}));const a=document.createElement('a');a.href=url;a.download='reward-quest-backup.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}});
-document.addEventListener('change',async e=>{if(e.target.dataset.characterFile){await loadCharacter(e.target);return;}if(e.target.dataset.item!==undefined){await saveItem(e.target);}if(e.target.id==='motion'){const checked=e.target.checked;update(s=>({...s,motion:checked}),{redraw:false}).then(()=>{e.target.checked=state.motion;document.body.classList.toggle('reduced',reduced());});}if(e.target.id==='record-date')recordDate=e.target.value;});
+if(b.id==='login'){try{await repository.login();}catch(error){toast(error.message);}}if(b.id==='logout'){await repository.logout();}if(b.id==='create-shared'){try{await repository.createShared();toast('共有データを新規作成しました');}catch(error){toast(error.message);}}
+if(b.id==='export'){const url=URL.createObjectURL(new Blob([JSON.stringify({current:state,legacy:repository.legacyBackup()},null,2)],{type:'application/json'}));const a=document.createElement('a');a.href=url;a.download='reward-quest-backup.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}});
+document.addEventListener('change',async e=>{if(e.target.dataset.item!==undefined){await saveItem(e.target);}if(e.target.id==='motion'){const checked=e.target.checked;update(s=>({...s,motion:checked}),{redraw:false}).then(()=>{e.target.checked=state.motion;document.body.classList.toggle('reduced',reduced());});}if(e.target.id==='record-date')recordDate=e.target.value;});
 document.addEventListener('input',e=>{if(e.target.type==='range')document.querySelector('#out-'+e.target.name).value=e.target.value;});
-document.addEventListener('submit',async e=>{if(e.target.id==='itinerary-editor'){e.preventDefault();const patch=Object.fromEntries(new FormData(e.target));const n=activeNotice,y=window.scrollY;if(await update(s=>editPlan(s,n.kind,n.ref,patch),{redraw:false})){activeNotice=null;render();window.scrollTo(0,y);toast('旅程を保存しました');}return;}if(e.target.id!=='daily')return;e.preventDefault();const date=activeNotice.ref;const values=Object.fromEntries([...new FormData(e.target)].map(([k,v])=>[k,+v]));activeNotice=null;if(await update(s=>setCurrent(s,s.role,values,date)))toast('今日の冒険を記録した！ おつかれさま ♥');});
-window.addEventListener('storage',()=>{try{state=repository.load();configureSchedule(state.plan);configureCharacters(state.images);if(page==='item')refreshItemUI();else render();}catch{toast('保存データを再読込できません');}});
+document.addEventListener('submit',async e=>{if(e.target.id==='itinerary-editor'){e.preventDefault();const patch=Object.fromEntries(new FormData(e.target));const n=activeNotice,y=window.scrollY;if(await update(s=>editPlan(s,n.kind,n.ref,patch),{redraw:false})){activeNotice=null;render();window.scrollTo(0,y);toast('旅程を保存しました');}return;}if(e.target.id!=='daily')return;e.preventDefault();const date=activeNotice.ref;const values=Object.fromEntries([...new FormData(e.target)].map(([k,v])=>[k,+v]));activeNotice=null;if(await update(s=>setCurrent(s,myRole(),values,date)))toast('今日の冒険を記録した！ おつかれさま ♥');});
+window.addEventListener('storage',()=>{try{state=repository.load();configureSchedule(state.plan);if(page==='item')refreshItemUI();else render();}catch{toast('保存データを再読込できません');}});
 let timeSignature='';
 function tick(){const sig=[nextAction(now())?.id,quests.filter(q=>unlocked(q,now())).map(q=>q.id).join(),recoveryEvents.filter(e=>Date.parse(e.availableAt)<=now()).map(e=>e.id).join(),eligibleDates().join(),actions.filter(a=>unlocked(a,now())).length,actions.filter(a=>Date.parse(a.at)<=now()).length].join('|');if(sig!==timeSignature){timeSignature=sig;if(!opening&&!activeNotice&&!['settings','item'].includes(page))render();}const a=nextAction(now()),el=document.querySelector('#countdown');if(el&&a)el.textContent=remaining(Date.parse(a.at));const busEl=document.querySelector('#bus-countdown');if(busEl){const target=now()<Date.parse(returnTarget().at)?returnTarget():returnBus();busEl.textContent=`${target.id===returnTarget().id?'バス停へ戻る目安まで':'帰還バス出発まで'} ${remaining(Date.parse(target.at))}`;}promptPending();}
 render();if(!state.seen)startOpening();else promptPending();setInterval(tick,1000);document.addEventListener('visibilitychange',()=>{if(!document.hidden)tick();});
@@ -811,13 +973,12 @@ function drawGrowth(n){
  requestAnimationFrame(frame);
 }
 
-async function loadCharacter(input){const file=input.files?.[0],role=input.dataset.characterFile;if(!file)return;
- try{if(!['bride','groom'].includes(role)||file.size>2*1024*1024)throw Error('PNGは2MB以下を選んでください');
-  const bytes=new Uint8Array(await file.arrayBuffer());const signature=[137,80,78,71,13,10,26,10];if(!signature.every((n,i)=>bytes[i]===n))throw Error('PNGファイルを選んでください');
-  const data=await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result);reader.onerror=()=>reject(Error('画像を読み込めません'));reader.readAsDataURL(file);});
-  await new Promise((resolve,reject)=>{const img=new Image();img.onload=()=>resolve();img.onerror=()=>reject(Error('画像を表示できません'));img.src=data;});
-  if(await update(s=>({...s,images:{...s.images,[role]:data}})))toast('キャラクター画像を保存しました');
- }catch(e){toast(e.message);input.value='';}
+
+function authPanel(){const session=repository.session;
+ const titles={unconfigured:'Firebaseの設定が必要です','signed-out':'Googleアカウントでログイン',unauthorized:'このアカウントは未許可です',loading:'共有データを確認しています',ready:'夫婦のデータを共有中',missing:'共有データは未作成です',denied:'Firestoreのアクセスが拒否されました',error:'共有データに接続できません'};
+ return `<section class="panel auth-panel"><span class="eyebrow">GOOGLE LOGIN / SHARED PARTY</span><h2>${titles[session.status]||'接続準備中'}</h2><p>${esc(session.message||'共有ステータスは許可された2人だけが閲覧・更新できます。持ち物チェックはログインなしで使えます。')}</p>${session.missing?.length?`<p class="notice">不足：${session.missing.map(esc).join(' / ')}</p>`:''}${session.user?`<p class="notice">ログイン中：${esc(session.user.email||'Googleユーザー')}<br>Firebase UID：<code>${esc(session.user.uid)}</code>${session.player?`<br>編集できる現在値：${session.player==='groom'?'新郎':'新婦'}`:''}</p><button class="secondary" id="logout">ログアウト</button>`:`<button class="primary" id="login">Googleでログイン</button>`}${session.status==='missing'?'<p class="notice">初期値から新規作成します。旧端末の数値を自動アップロードしません。既に存在するドキュメントは上書きしません。</p><button class="primary" id="create-shared">共有データを新規作成</button>':''}</section>`;
 }
+repository.subscribe(()=>{try{state=repository.load();localLoadFailed=false;}catch(error){state=fresh();localLoadFailed=true;storageError=error.message;}configureSchedule(state.plan);if(!sharedReady())activeNotice=null;if(page==='item'&&!opening){refreshItemUI();return;}render();});
+repository.start();
 
 </script></body></html>

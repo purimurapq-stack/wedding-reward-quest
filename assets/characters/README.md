@@ -1,8 +1,8 @@
-# 静止PNGの保存先
-以下の添付画像を受領後、このディレクトリに保存します。
-- character_hanayome_01_black.png（新婦）
-- character_hanamuko_gray_black.png（新郎）
+# 画像の配置
+以下の原本PNGをこのフォルダに保存してください。
+- character_hanayome_01_black.png
+- character_hanamuko_gray_black.png
 
-チャット内の添付画像は視認できていますが、元PNGがツール用のファイルとして提供されていないため、リポジトリ内は未配置です。設定画面から端末上の元PNGを選択すると、そのまま全画面へ適用できます。生成ドット絵の代用はしていません。読み込み失敗時だけラベルを表示します。
+チャット内で画像は視認できていますが、ツールから原本ファイルを取得できないため、まだPNG本体は未配置です。ZIPなど原本ファイルを取得できる形での受領待ちです。
 
-src/visuals.js のcharacterAssetsで一括設定します。すべての表示に同じPNGを使用し、縦横比を保つobject-fit:containとimage-rendering:pixelatedを適用。単体HTML生成時には配置済み画像を自動でdata URL化します。
+画像アップロード用UIや端末ごとの画像保存はありません。HOME/STATUS/オープニングは同じ相対パスを使います。比率・透過・ドットを保ち、結婚式だけCSSでジャンプ。PNG配置後のビルドで単体HTMLにも元画像を内蔵します。
