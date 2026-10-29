@@ -1,188 +1,90 @@
 # 結婚式お疲れ様旅行 — クリア後のごほうびクエスト
-既存の旅行RPGにGoogleログインと夫婦の共有保存を追加した静的Webアプリです。HOME / QUEST / STATUS / ITEM / SETTINGS、実旅程、NEXT ACTION、22秒のオープニング、成長演出を維持しています。
 
-**この変更はデプロイしていません。本番データ・本番ルールを変更していません。許可UIDは空欄なので初期状態は全員アクセス拒否です。**
+**今回はFirebaseを使いません。Googleログインなしで、そのまま旅行RPGを遊べます。** PCへのNode.js/Java/Firebase CLIのインストール、Google Cloudの接続、住所・支払い情報、有料プランへの変更は不要です。
 
-## 今回の保存方式
-| データ | 保存先 |
-|---|---|
-| 2人の現在値・最大値、回復イベント達成、クエスト達成、夜の数値記録 | Cloud Firestoreの1つの共有ドキュメント |
-| 持ち物チェック、演出設定、初回再生済み、通知確認、旅程の端末内編集 | 各端末のlocalStorage |
-| 新郎/新婦のキャラクター画像 | リポジトリのassets（自動読込） |
-| 新郎/新婦の表示モード | URLのroleパラメータ |
+GitHub Pages用の軽量な静的Webアプリです。既存の5画面・旅程・演出・ステータス成長・クエスト解放・持ち物チェックを維持しています。
 
-持ち物はFirestoreへ一切送信しません。共有値はログイン・許可・サーバーからの取得が確認できるまで表示しません。匿名、未許可アカウント、読取拒否、エラー、取得中は案内画面になります。ログアウト時も共有値を消します。
+## ブラウザだけで公開する
 
-GoogleのUIDで許可と本人の編集対象を判定します。`?role=bride` を付けても新婦のGoogle権限にはなりません。ログインUIDが新郎なら、URLが新婦表示でも現在値の編集は新郎だけです。
+[初心者向けの順番付き手順](docs/PAGES_SETUP.md)を参照してください。
 
-- `?role=bride`：新婦表示。旅程をすべて閲覧・端末内編集
-- `?role=groom` またはパラメータなし：新郎表示。未訪問の場所名を「？？？」で表示
+1. 新しいPRのChecksが緑色であることを確認して、変更をmainへマージします。
+2. GitHubの **Settings → Pages → Build and deployment → Source** を **GitHub Actions** にします。
+3. **Actions → Publish GitHub Pages → Run workflow → main → Run workflow** を押します。
+4. 成功後、Settings → Pagesの **Visit site** から開きます。
 
-URL制御は演出上のネタバレ防止だけで、機密保護ではありません。実旅程はJavaScriptに収録しています。
+コードを修正する側でテストとビルドを用意してあり、PCでコマンドを入力する必要はありません。PR/mainの検証だけではActions版のPages公開は始まらず、上記の手動実行で公開します。既存Pagesが「Deploy from a branch / main」の場合も、このPRのルートindex.htmlは相対パスで動作します。推奨はdistだけを配信するGitHub Actions方式です。
+
+本作業はPR作成までで、mainへのマージやサイト公開は実施しません。既存リポジトリの公開/非公開設定や課金プランも変更しません。
+
+## 新郎・新婦のURL
+
+標準のPages URLの例：
+- 新郎：`https://purimurapq-stack.github.io/wedding-reward-quest/?role=groom`
+- 新婦：`https://purimurapq-stack.github.io/wedding-reward-quest/?role=bride`
+
+実際のURLはSettings → Pagesで確認します。パラメータ省略時は新郎表示。新婦は全旅程と編集、新郎は未訪問の場所名を「？？？」で表示し、予定訪問時刻になると公開します。訪問済みの駅名は帰路にも表示します。認証ではなく、画面上のネタバレ防止です。
+
+## 保存するもの
+
+すべて**各端末のlocalStorage**へ保存します。2人の端末間で同期しません。
+
+- 新郎・新婦の現在値/最大値
+- 回復イベント達成と2人同時の成長
+- クエストの手動達成・達成日時
+- 夜のステータス入力記録
+- 持ち物チェック
+- 通知の確認履歴、演出・初回再生済み設定、端末内旅程編集
+
+同じ回復イベントIDを再度押しても加算しません。持ち物チェックは画面全体を再描画せず、件数と状態だけ更新します。保存失敗時は元へ戻して案内します。同一端末の複数タブはWeb Locks対応ブラウザで更新を直列化し、非対応環境では1タブでの利用をおすすめします。
+
+保存キーは`reward-quest-device-v4`。初回の変更時に、旧`reward-quest-v1`の数値/達成と、Firebase版`reward-quest-local-v3`の持ち物/設定を引き継ぎます。古いキーは削除せず残します。データが壊れている場合も自動で初期化しません。設定のバックアップから保管できます。
+
+Firebaseサーバーにしか保存されていなかった数値は、この版では取得しません。過去の端末内データがある場合だけ引き継ぎます。別端末・別ブラウザ・file://とPagesの間では保存領域が異なるため、自動移行できません。ブラウザのサイトデータ削除は保存を消すため行わないでください。通常の再読み込みで保存は維持されます。
 
 ## キャラクターPNG
-自動で以下の相対パスを読み込みます。アップロードUIと画像のlocalStorage保存は削除しました。
 
-- `assets/characters/character_hanayome_01_black.png`
-- `assets/characters/character_hanamuko_gray_black.png`
+ユーザーがGitHubへアップロードした透過PNGを、そのまま自動で使います。
 
-**チャット内の画像は見えていますが、元PNGのファイルID/ローカルファイルが提供されていないため、この2ファイルの配置はまだ完了していません。** 元のPNGをこの場所へ保存してください。別のイラストは作成していません。画像ファイル未配置時だけ代替ラベルを表示します。
+- `assets/characters/character_hanayome_01_black.png`（500×600 RGBA）
+- `assets/characters/character_hanamuko_gray_black.png`（500×615 RGBA）
 
-`src/visuals.js` の相対パスを全画面で共通使用。`object-fit:contain` と `image-rendering:pixelated` で比率と輪郭を維持。結婚式シーンだけ2人のジャンプをずらし、帰宅シーンでは止めます。GitHub Pagesの `/wedding-reward-quest/` 配下でもFirebase Hostingのルートでも同じ相対パスで動作します。
+原本のGit blob SHAはそれぞれ`c0510a3d438c16881dbd7e3eab78f10ae26658a3`、`091396b27aae483d68a5e9ea87dc7ab8ccb74338`で、今回変更していません。HOME・STATUS・オープニングは同じ相対パスで表示し、アップロードUIや画像のlocalStorage保存はありません。縦横比・透過・pixelatedを維持し、結婚式だけジャンプします。読み込み失敗時のみ代替ラベル。
 
-## ブラウザ中心の設定・公開（おすすめ）
+`src/visuals.js`で将来の差し替え先を一括管理できます。ビルドはPNGがない場合に失敗するため、画像の入れ忘れを検出します。単体HTMLプレビューにも原本PNGを内蔵します。
 
-**PCへのソフトのインストール・コマンド操作は不要にできます。** [ブラウザ操作だけの手順](docs/BROWSER_SETUP.md)を参照してください。
+## 旅行中の動作
 
-- Actionsが依存関係・Node/Java・ルール生成・通常テスト・Firestore Emulator・ビルドを実行
-- 適用する本番Rulesファイル自体もEmulatorへ読み込み、検証後の同じ成果物だけを保存
-- 公開は検証成功後に実行番号とSHAを指定し、手動で`DEPLOY SHA`を承認した場合だけ
-- Rules適用はさらに`APPLY VERIFIED RULES`の明示承認が必要
-- 認証はOIDC/Workload Identity Federation。JSON秘密鍵やFirebase長期トークンをGitHubへ保存しない
-- UIDは初回Googleログイン後にFirebase ConsoleのAuthentication → Usersから取得し、GitHubの鉛筆ボタンで登録
+- HOMEのNEXT ACTIONと秒単位カウントダウンが次の行動へ自動更新
+- QUESTでDAY1〜3を切り替え、詳細な時刻・交通・訪問済みの場所を振り返り
+- 時刻で情報解放し、達成はボタン操作で別に保存
+- DAY2は14:20発/15:10発の候補を変更可能。15:50のバス停帰還目安と16:04発の重要なバスの警告を表示
+- 回復イベントは時刻で出現。達成時の最大HP/MP/幸福度成長とカウントアップ演出を維持
+- 最終日の新規クエストは9/12/15時のみ。夜の現在値入力と後日記録も維持
+- 22秒オープニングは8/9/5秒で進み、自動でHOMEへ。スキップ・再視聴・動きを減らす設定に対応
 
-まだユーザーUIDがない場合は、共有拒否を維持した`hosting-only`の初回承認公開 → 2人がGoogleログイン → ConsoleでUID取得 → GitHub登録 → CI → `hosting-and-rules`承認公開の順です。
+旅程の時刻は今回変更していません。新婦モードの行編集はその端末だけに保存されます。設定のデモ日時はローカルゲームの解放/達成にも反映され、デモで達成したイベントも保存します。旅行前にデモで進めすぎないようにしてください。再生だけを試すなら「オープニング再視聴」が使えます。
 
-非公開リポジトリのプランによる環境レビュー機能の制約を避け、承認はテスト成功後の手動workflow_dispatch＋対象SHA入力を必須にしています。二者承認ではありません。Push/PRだけで公開するワークフローはありません。
+初回のページ読込にはインターネットが必要です。読み込み済みのタブ内では時刻表示や端末保存のためにFirebase接続することはありません。オフラインでの初回起動を保証するPWAではありません。
 
-以下はローカル環境も使いたい場合の補足手順です。ブラウザ中心ならインストール部分は不要です。
+## テスト・ビルド（開発者向け）
 
-## Windows PCでの準備
-1. Node.js公式サイトから **Node.js 22 LTS以降** をインストールします。
-2. GitHubで今回の作業ブランチを選び、緑色の **Code → Download ZIP** でダウンロードし、展開します。既存の別作業フォルダと取り違えないようにしてください。
-3. 展開したフォルダをエクスプローラーで開き、アドレス欄に `cmd` と入力してEnter。コマンドプロンプトがそのフォルダで開きます。
-4. 次を順に実行します（通常テストとビルドだけならnpm install前でも動きます）。
+PCでこれらを実行する必要はありません。GitHub Actionsが同じ処理を実行します。
 
-```bat
-npm install
+```sh
 npm test
 npm run build
 npm run dev
 ```
 
-表示された `http://localhost:5173` をブラウザで開きます。終了はコマンドプロンプトでCtrl+Cです。HTMLをダブルクリックするfile://方式ではGoogleログインは使えません。`reward-quest-preview.html` は演出・公開UIの確認用です。
+外部npm依存なし、Node.js 20以上。Firebase SDK/Firestore/Googleログインのコードは現在のモジュール経路にありません。Pages用のGitHub標準権限だけを使用し、Google CloudやFirebaseの認証情報は使いません。
 
-## Firebase Consoleで実施すること
-既存の **wedding-reward-quest** プロジェクトを開きます。サービスアカウント秘密鍵の作成・ダウンロードは不要です。
+配信対象は`dist/`のみ。index.html/src/assets/.nojekyllを含み、archive、テスト、秘密情報、Firebaseモジュールは含めません。相対パスなのでリポジトリ名付きのPagesパスでも動作します。
 
-### 1. Googleログインを有効にする
-1. **Authentication → Sign-in method（ログイン方法）→ Google** を選びます。
-2. 有効にし、プロジェクトのサポート用メールアドレスを選んで保存します。
-3. **Authentication → Settings → Authorized domains（承認済みドメイン）** を確認します。
-4. ローカル確認用に `localhost` を追加します（新しいFirebaseプロジェクトでは自動登録されない場合があります）。
-5. Hosting公開時には `wedding-reward-quest.web.app`、必要に応じて `wedding-reward-quest.firebaseapp.com` を確認します。GitHub Pagesからログインする場合は `purimurapq-stack.github.io` も追加します。ここはパスを含めずホスト名だけです。
+テストは保存/再読込/旧データ移行/端末独立/重複防止/保存失敗差し戻し、5画面、夜入力、時刻解放、成長、22秒演出、画像ファイルと相対パス、Firebase接続がないモジュール経路を確認します。簡易DOMテストは実ブラウザの描画テストではないため、最後にiPhone/Androidの通常ブラウザで表示と操作を確認してください。
 
-### 2. Firestoreを確認する
-1. **Firestore Database** を開きます。既にデータベースがある場合は削除・再作成しないでください。
-2. まだなければデフォルトデータベースを **本番モード（初期拒否）** で作成します。テストモードの全開放ルールは使いません。
-3. データの保存先は `couples/wedding-2026` です。既存の別パスのデータを自動移行・上書きする機能はありません。
+## Firebase版の履歴
 
-### 3. 新郎・新婦のUIDを調べる
-1. ローカルサイトのSETTINGSから **Googleでログイン** を押します。
-2. まだUID未登録なので、共有データは表示されません。設定用のFirebase UIDは画面に表示します。
-3. 新郎・新婦それぞれのGoogleアカウントで一度ログインしてください。Authentication → UsersでもUIDをコピーできます。メールアドレスではなく **UID** を使用します。
-4. `src/firebase-config.js` をメモ帳/エディターで開き、次の空欄をそれぞれ埋めて保存します。
+`archive/firebase/`へコード・テスト・設定・公開ワークフロー・旧手順を退避しました。現在のActionsはこの中のワークフローを実行しません。完全な変更前ソースはコミット`6d46c57158d55e0105a5683fc71d5d9f9af849d4`とPR #1〜#3にも残っています。
 
-```js
-export const allowedUsers = {
-  groom: '新郎のFirebase Authentication UID',
-  bride: '新婦のFirebase Authentication UID'
-};
-```
-
-2人は異なるUIDが必要です。片方でも空欄ならアプリ・ルールとも共有データへのアクセスを拒否します。`firebaseConfig` は今回提供いただいたWeb設定を登録済みです。これは公開識別情報で、秘密鍵ではありません。サービスアカウントJSONやAdmin SDK秘密鍵はリポジトリに入れないでください。
-
-## Security Rulesの確認と適用
-まずPCのコマンドプロンプトで実行します。
-
-```bat
-npm run rules:generate
-npm test
-```
-
-`firestore.rules` が2人のUID、既存のイベント報酬、クエスト解放時刻に合わせて生成されます。**生成だけでは本番に反映されません。** `rules:generate` はクラウド接続しません。生成ファイルを手編集するより、`src/firebase-config.js` と `src/data.js` を編集して再生成してください。
-
-ルールは以下を検証します。
-- Googleログイン済み、UIDが明示した2人のどちらか
-- `couples/wedding-2026` 以外を拒否。ドキュメントの一覧取得・削除も拒否
-- 初回作成は固定初期値だけ。既存データの初期化・巻き戻しを許可しない
-- 許可フィールドだけ、正しいスキーマ、整数、0〜最大値、最大10000の値
-- 回復は既知のイベントID、サーバー時刻が解放後、未達成であること
-- 両者への最大値/現在値の増分が正確に報酬設定と一致すること
-- クエストは解放済みの既知IDを一度だけ記録、達成時刻はサーバー時刻
-- 夜の現在値編集はGoogle UIDに対応する本人のみ。最大値・他人の値・達成履歴を勝手に変更できない
-- リビジョンを1だけ増加し、更新日時をサーバー時刻にすること
-
-### Emulatorでルールをテストする
-ルールの本当の評価は通常のNodeテストとは別です。PCにJava 21（JDK）をインストールしてから実行します。
-
-```bat
-npm run test:rules
-```
-
-このコマンドは `demo-wedding-reward-quest` の **ローカルEmulatorだけ** を使い、本番へ接続しません。匿名/未許可/他人編集/過大報酬/二重加算/未来イベント拒否/同時達成を確認します。正常系テストの時刻だけをEmulator内のテスト用ルールで過去にしています。本番のfirestore.rulesは書き換えません。
-
-### 本番ルールの反映（内容を確認・承認した後だけ）
-先にConsoleの **Rules** で現在のルールをコピーしてバックアップしてください。この生成ファイルは他のコレクションを拒否するため、同じFirebaseプロジェクトで他アプリを使っている場合は、その既存ルールを維持する統合作業が必要です。無条件で上書きしないでください。
-
-内容とEmulator結果を確認し、反映してよいと判断した段階で実行します。
-
-```bat
-npx firebase login
-npx firebase projects:list
-npx firebase deploy --only firestore:rules --project wedding-reward-quest
-```
-
-`projects:list` の名前/IDを必ず確認します。`--only firestore:rules` を付け、データ削除やインデックス削除は行いません。この作業では私の側から本番ルールを適用していません。
-
-Consoleで適用する場合は、レビュー済みfirestore.rulesの内容を **Firestore Database → Rules** へ貼り付けてPublishします。CLIかConsoleのどちらか一方で十分です。
-
-## ローカルで2人の同期を確認
-1. UID/Rulesを設定したら、`npm run build` と `npm run dev` を実行し、再読み込みします。
-2. 既存ドキュメントがない場合だけ、許可アカウントでSETTINGSの **共有データを新規作成** を押します。初期値から作成します。トランザクションで既存ドキュメントを再確認し、存在すれば上書きせず停止します。
-3. 別のブラウザ/シークレットウィンドウで、もう一方のGoogleアカウントでログインします。
-4. 表示URLは新郎なら `http://localhost:5173/?role=groom`、新婦なら `http://localhost:5173/?role=bride` です。
-5. 実際の解放時刻を過ぎたイベントを達成すると両画面へ反映されます。共有書き込みはデモ時計では早送りできません。旅行前の報酬テストはEmulatorで行ってください。
-6. 持ち物をチェックし、別ブラウザのチェックが変わらないことを確認します。
-7. 未許可の第三アカウントと未ログインでは共有ステータスが表示されないことを確認します。
-
-Firestoreは1ドキュメントのトランザクションで、イベントID確認・2人の成長・達成履歴をまとめてコミットします。複数端末の同じイベント操作は再試行後に既達成として処理し、二重加算しません。オフラインの共有更新は成功扱いにせず、案内します。キャッシュだけのスナップショットを初回のアクセス許可の証拠にはしません。
-
-## Firebase Hosting公開（公開を確認・承認した後だけ）
-設定ファイルは `.firebaserc`、`firebase.json`、`firestore.indexes.json` を追加済みです。配信対象は既存と同じ静的な `dist/` だけ。Functions、Admin SDK、Storageアップロード、Analytics、サーバー実装は使いません。Sparkプランの範囲で始められる構成ですが、Firestore等の無料枠・利用量はConsoleで確認してください。
-
-公開前に確認する項目：PNG2枚の配置、UID2件、Googleログイン有効化、承認済みドメイン、ルールのEmulatorテストとレビュー、ローカル表示/同期/非許可拒否。既存Hostingサイトがある場合は、デプロイがそのサイトの内容を置き換えるため、プロジェクトとサイトの対象を確認してください。
-
-```bat
-npm run rules:generate
-npm test
-npm run test:rules
-npm run build
-npx firebase deploy --only hosting --project wedding-reward-quest
-```
-
-公開URLの例は `https://wedding-reward-quest.web.app/?role=groom` と `https://wedding-reward-quest.web.app/?role=bride`。実際のURLはCLI出力で確認します。この作業では公開していません。
-
-GitHub Pagesも `dist/` の内容を配信できます。ルート絶対パスを追加していないため既存のリポジトリ名付きパスを維持します。GoogleログインにはGitHub Pagesのホスト名の登録が別途必要です。Pagesのワークフローや既存設定を勝手に変更していません。
-
-## 旧保存データについて
-旧キー `reward-quest-v1` のステータス・記録は残します（不要になった画像データだけ除去）。持ち物・演出・旅程編集・通知確認は新しい端末内キー `reward-quest-local-v3` へ引き継ぎます。共有データへは自動投入しません。
-
-SETTINGSのバックアップは現在表示できる状態と旧端末バックアップを含みます。旧ステータスをFirestoreへ移す場合は、既存の共有データとどちらを採用するか確認する別作業が必要です。このPRでは本番データのインポート/上書き機能は実装していません。
-
-## ソースの構造
-- `src/itinerary.js`：実旅程の初期値（今回時刻変更なし）
-- `src/data.js` / `src/domain.js`：成長・解放・通知・旅程編集の既存ロジック
-- `src/firebase-config.js`：Web設定、UID2人、共有ドキュメントのパス
-- `src/firebase-client.js`：Google認証、購読、Firestoreトランザクション
-- `src/shared-state.js`：共有フィールド、共有コマンド、本人編集の検証
-- `src/storage.js`：端末設定と共有値の合成、旧保存移行
-- `scripts/firestore-rules.mjs`：UID・報酬・解放時刻からルールを生成
-- `tests/firebase/`：ローカルEmulator用Security Rulesテスト
-
-画面内で変更した旅程は端末内の表示設定です。Firestore Rulesの報酬と解放条件を変更する場合は、ソースを変更しルール再生成/レビュー/テストが必要です。URLやデモ時計は認可に使いません。
-
-## 実施した検証・残件
-Nodeの通常テストではゲーム数値・重複・マスク・旅程/便切替・旧保存、共有/非共有の分離、未許可時のFirestore未購読、模擬SDKでのトランザクション重複防止/本人編集/ログアウト消去、生成ルールの整合性、簡易DOMでの5画面/表示拒否/チェック部分更新を検証します。
-
-この開発環境ではネットワーク制約でEmulatorを実行できません。今回追加したActionsで通常テストとEmulatorの両方を実行し、成功結果を確認してください。Actionsの実行・結果はPR/Actions画面に表示されます。Google実ログイン・Firestore実同期・iPhone/Android実機テストも未実施。これらと元PNG配置、UID登録、ルール適用、Hosting公開は上記手順で実施してください。通常テストの成功をSecurity Rulesの実評価の代わりにはしません。
+将来再開するときに参照する資料です。今回はGoogle Cloudへの接続、IAM/OIDC設定、住所/支払い情報の登録、有料プランへの変更、Firebaseルール適用、Firebaseデプロイは行いません。

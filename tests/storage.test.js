@@ -1,23 +1,27 @@
 import test from 'node:test';import assert from 'node:assert/strict';
-// Browser storage globals must exist before the production singleton is imported.
 globalThis.localStorage={getItem:()=>null,setItem(){}};globalThis.location={search:''};
-const {createRepository,LOCAL_KEY,viewRole}=await import('../src/storage.js');
-const {fresh,applyEvent}=await import('../src/domain.js');
-function memory(seed={}){const data=new Map(Object.entries(seed));return {getItem:k=>data.get(k)||null,setItem:(k,v)=>data.set(k,v),data};}
-function fakeCloud(status='ready') {return {session:{status,player:'groom'},shared:fresh(),calls:0,lastSharedChange:true,async transact(before,next){this.calls++;this.shared=next;},start(){},subscribe(){}};}
-test('URL role is presentation only, default groom, stored role does not override URL',()=>{
- const storage=memory({'reward-quest-v1':JSON.stringify({...fresh(),role:'bride',items:[2],images:{bride:'old-base64'}})}),cloud=fakeCloud('signed-out');
- const repo=createRepository({storage,cloud,search:()=>'?role=groom'});assert.equal(repo.load().role,'groom');assert.deepEqual(repo.load().items,[2]);assert.equal(repo.load().images,undefined);assert.ok(!storage.getItem('reward-quest-v1').includes('old-base64'));assert.ok(!storage.getItem(LOCAL_KEY).includes('players'));assert.equal(viewRole('?role=bride'),'bride');assert.equal(viewRole('?role=anything'),'groom');
+const {createRepository,LOCAL_KEY,PREFS_KEY,LEGACY_KEY,viewRole}=await import('../src/storage.js');
+const {fresh,applyEvent,clearQuest,setCurrent}=await import('../src/domain.js');
+const time=Date.parse('2026-11-03T00:00:00+09:00');
+function memory(seed={}){const data=new Map(Object.entries(seed));return {getItem:k=>data.get(k)??null,setItem:(k,v)=>data.set(k,v),data};}
+test('no login: events, quest clear, current values and items persist across repository reloads',async()=>{
+ const storage=memory(),repo=createRepository({storage,search:()=>'?role=bride'});
+ await repo.transact(s=>applyEvent(s,'d2-sleep',time));await repo.transact(s=>clearQuest(s,'q1-0',time));await repo.transact(s=>setCurrent(s,'bride',{hp:100,mp:50,hunger:20,joy:100},'2026-11-02'));await repo.transact(s=>({...s,items:[1,2]}));
+ const reloaded=createRepository({storage,search:()=>''});assert.equal(reloaded.load().role,'groom');assert.equal(reloaded.load().players.bride.hp[0],100);assert.equal(reloaded.load().players.bride.hp[1],250);assert.ok(reloaded.load().done.includes('d2-sleep'));assert.ok(reloaded.load().questClears['q1-0']);assert.deepEqual(reloaded.load().items,[1,2]);assert.ok(storage.getItem(LOCAL_KEY));
 });
-test('item/preferences never enter cloud; shared fields never enter new local preference storage',async()=>{
- const storage=memory(),cloud=fakeCloud(),repo=createRepository({storage,cloud,search:()=>'?role=bride'});
- await repo.transact(s=>({...s,items:[1,2],plan:{bus:'late'}}));assert.equal(cloud.calls,0);assert.deepEqual(repo.load().items,[1,2]);
- await repo.transact(s=>applyEvent(s,'d1-bath',Date.parse('2026-11-03T00:00:00+09:00')));assert.equal(cloud.calls,1);const prefs=JSON.parse(storage.getItem(LOCAL_KEY));for(const key of ['players','done','questClears','images','logs'])assert.ok(!(key in prefs));
+test('v1/v2 full game and v3 preferences migrate without resetting old numerical data',async()=>{
+ const old={...fresh(),players:{...fresh().players,groom:{...fresh().players.groom,hp:[300,900]}},done:['d1-bath'],items:[0],questClears:{'q1-0':'2026-10-31T15:00:00Z'},images:{groom:'old-image'}};
+ const storage=memory({[LEGACY_KEY]:JSON.stringify(old),[PREFS_KEY]:JSON.stringify({items:[2,3],seen:true,plan:{bus:'late'}})}),repo=createRepository({storage,search:()=>'?role=bride'});
+ const before=repo.load();assert.deepEqual(before.players.groom.hp,[300,900]);assert.deepEqual(before.items,[2,3]);assert.deepEqual(before.done,['d1-bath']);assert.equal(before.plan.bus,'late');assert.equal(before.images,undefined);
+ await repo.transact(s=>({...s,motion:false}));const saved=JSON.parse(storage.getItem(LOCAL_KEY));assert.equal(saved.images,undefined);assert.equal(saved.role,undefined);assert.equal(saved.players.groom.hp[1],900);assert.equal(JSON.parse(storage.getItem(LEGACY_KEY)).images.groom,'old-image');
 });
-test('old statuses remain a backup and are never automatically sent or displayed as shared data',()=>{
- const old={...fresh(),players:{...fresh().players,groom:{...fresh().players.groom,hp:[300,900]}}};const storage=memory({'reward-quest-v1':JSON.stringify(old)}),repo=createRepository({storage,cloud:fakeCloud('unauthorized'),search:()=>'?role=bride'});
- assert.deepEqual(repo.legacyBackup().players.groom.hp,[300,900]);assert.notDeepEqual(repo.load().players.groom.hp,[300,900]);
+test('newer local game wins over old backups; roles are URL presentation only',()=>{
+ const storage=memory({[LOCAL_KEY]:JSON.stringify({...fresh(),done:['d2-bath']}),[LEGACY_KEY]:JSON.stringify({...fresh(),done:['d1-bath'],role:'bride'})});const repo=createRepository({storage,search:()=>'?role=wrong'});assert.deepEqual(repo.load().done,['d2-bath']);assert.equal(repo.load().role,'groom');assert.equal(viewRole('?role=bride'),'bride');
 });
-test('local-only operations work signed out; shared changes are denied',async()=>{
- const cloud=fakeCloud('signed-out');cloud.transact=async()=>{throw Error('denied');};const repo=createRepository({storage:memory(),cloud,search:()=>''});await repo.transact(s=>({...s,items:[0]}));await assert.rejects(()=>repo.transact(s=>applyEvent(s,'d1-bath',Date.parse('2026-11-03T00:00:00Z'))));assert.deepEqual(repo.load().items,[0]);
+test('each device has an independent save and duplicate events remain idempotent',async()=>{
+ const a=createRepository({storage:memory(),search:()=>''}),b=createRepository({storage:memory(),search:()=>''});await Promise.all([a.transact(s=>applyEvent(s,'d1-bath',time)),a.transact(s=>applyEvent(s,'d1-bath',time))]);assert.equal(a.load().players.groom.hp[1],130);assert.equal(b.load().players.groom.hp[1],100);assert.equal(a.load().done.length,1);
+});
+test('invalid saves are not overwritten and failed storage preserves the previous full state',async()=>{
+ const storage=memory({[LOCAL_KEY]:'broken'}),repo=createRepository({storage,search:()=>''});assert.throws(()=>repo.load());await assert.rejects(()=>repo.transact(s=>s));assert.equal(storage.getItem(LOCAL_KEY),'broken');
+ const ok=memory(),r=createRepository({storage:ok,search:()=>''});await r.transact(s=>({...s,items:[0]}));const previous=ok.getItem(LOCAL_KEY);ok.setItem=()=>{throw Error('quota');};await assert.rejects(()=>r.transact(s=>applyEvent(s,'d1-bath',time)));assert.equal(ok.getItem(LOCAL_KEY),previous);assert.equal(r.load().players.groom.hp[1],100);
 });

@@ -1,8 +1,7 @@
-# 画像の配置
-以下の原本PNGをこのフォルダに保存してください。
-- character_hanayome_01_black.png
-- character_hanamuko_gray_black.png
+# 配置済みの原本PNG
+- character_hanayome_01_black.png（500×600、RGBA透過）
+- character_hanamuko_gray_black.png（500×615、RGBA透過）
 
-チャット内で画像は視認できていますが、ツールから原本ファイルを取得できないため、まだPNG本体は未配置です。ZIPなど原本ファイルを取得できる形での受領待ちです。
+ユーザーがGitHubへアップロードしたPNGをそのまま使用します。src/visuals.jsがHOME/STATUS/オープニングの共通参照先です。縦横比・pixelated・透過を維持し、結婚式だけCSSでジャンプします。画像が読み込めない場合のみラベルを表示。
 
-画像アップロード用UIや端末ごとの画像保存はありません。HOME/STATUS/オープニングは同じ相対パスを使います。比率・透過・ドットを保ち、結婚式だけCSSでジャンプ。PNG配置後のビルドで単体HTMLにも元画像を内蔵します。
+差し替える場合は同名ファイルで置換するか、src/visuals.jsの相対パスを変更してください。ビルドで単体HTMLにもPNGを内蔵します。

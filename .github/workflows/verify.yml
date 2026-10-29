@@ -1,4 +1,4 @@
-name: Verify travel RPG
+name: Verify local travel RPG
 on:
   pull_request:
   push:
@@ -7,13 +7,13 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: verify-${{ github.ref }}
+  group: local-verify-${{ github.ref }}
   cancel-in-progress: true
 jobs:
   verify:
-    name: Verify and package
+    name: Local save and static Pages checks
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -21,38 +21,13 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: '22'
-      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
-        with:
-          distribution: temurin
-          java-version: '21'
-      - name: Install locked dependencies when available
-        shell: bash
-        run: |
-          if [ -f package-lock.json ]; then
-            npm ci --ignore-scripts --no-audit --no-fund
-          else
-            npm install --ignore-scripts --no-audit --no-fund
-          fi
-      - name: Generate production rules
-        run: npm run rules:generate
-      - name: Ordinary tests
+      - name: Test local game and saved-data migration
         run: npm test
-      - name: Firestore Security Rules (Emulator)
-        run: npm run test:rules
-        env:
-          CI: 'true'
-      - name: Build
+      - name: Build static app with original PNGs
         run: npm run build
-      - name: Package tested release
-        run: node scripts/release.mjs prepare
-        env:
-          RULES_TESTED: 'true'
-      - name: Upload tested release
+      - name: Upload preview for review
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: firebase-release-${{ github.sha }}
-          path: work/firebase-release/
+          name: local-rpg-preview
+          path: reward-quest-preview.html
           if-no-files-found: error
-          retention-days: 14
-      - name: Browser handoff
-        run: node scripts/ci-summary.mjs

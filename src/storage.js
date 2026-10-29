@@ -1,34 +1,42 @@
 import {fresh,migrate} from './domain.js';
-import {createCloudClient} from './firebase-client.js';
-import {extractShared} from './shared-state.js';
-export const LOCAL_KEY='reward-quest-local-v3';
-const LEGACY_KEY='reward-quest-v1';
-const localKeys=['items','motion','seen','ack','plan'];
+export const LOCAL_KEY='reward-quest-device-v4';
+export const PREFS_KEY='reward-quest-local-v3';
+export const LEGACY_KEY='reward-quest-v1';
 export const viewRole=search=>new URLSearchParams(search).get('role')==='bride'?'bride':'groom';
-export function createRepository({storage=localStorage,search=()=>location.search,cloud=createCloudClient()}={}){
+const savedKeys=['version','players','done','items','motion','seen','ack','plan','logs','questClears','rewardHistory'];
+export function validateLocal(state){
+ if(state.version!==2||!['done','items','ack'].every(k=>Array.isArray(state[k]))||!state.logs||!state.questClears||!state.plan)throw Error('端末の保存データを読み込めません。設定のバックアップで保管してください。');
+ for(const role of ['groom','bride'])for(const key of ['hp','mp','hunger','joy']){const pair=state.players?.[role]?.[key];if(!Array.isArray(pair)||pair.length!==2||!pair.every(Number.isFinite)||pair[1]<=0||pair[0]<0||pair[0]>pair[1])throw Error('ステータスの保存形式が不正です。自動で初期化せず停止しました。');}
+ return state;
+}
+export function createRepository({storage=localStorage,search=()=>location.search}={}){
  let queue=Promise.resolve();
- function preferences(){
-  const current=storage.getItem(LOCAL_KEY);if(current)return JSON.parse(current);
-  const old=storage.getItem(LEGACY_KEY);if(!old)return {};
-  const legacy=migrate(JSON.parse(old));const prefs=Object.fromEntries(localKeys.filter(k=>legacy[k]!==undefined).map(k=>[k,legacy[k]]));
-  storage.setItem(LOCAL_KEY,JSON.stringify(prefs));
-  // Old numerical game data remains as a backup, but per-device image blobs are retired.
-  if(legacy.images){delete legacy.images;storage.setItem(LEGACY_KEY,JSON.stringify(legacy));}
-  return prefs;
+ function read(){
+  const saved=storage.getItem(LOCAL_KEY);
+  if(saved!==null)return validateLocal({...fresh(),...JSON.parse(saved)});
+  // Preserve old numerical game data; the Firebase version stored only preferences locally.
+  const legacy=storage.getItem(LEGACY_KEY),prefs=storage.getItem(PREFS_KEY);
+  const previous=legacy===null?fresh():migrate(JSON.parse(legacy));
+  const localPrefs=prefs===null?{}:JSON.parse(prefs);
+  const migrated={...fresh(),...previous};
+  for(const key of ['items','motion','seen','ack','plan'])if(localPrefs[key]!==undefined)migrated[key]=localPrefs[key];
+  delete migrated.images;delete migrated.role;
+  return validateLocal(migrated);
  }
+ function serialize(state){return Object.fromEntries(savedKeys.filter(k=>state[k]!==undefined).map(k=>[k,state[k]]));}
  return {
-  cloud,get session(){return cloud.session;},get lastSharedChange(){return cloud.lastSharedChange;},
-  load(){const result={...fresh(),...preferences(),role:viewRole(search())};if(cloud.session.status==='ready')Object.assign(result,extractShared(cloud.shared));return result;},
-  subscribe(fn){return cloud.subscribe(fn);},start(){return cloud.start();},login(){return cloud.login();},logout(){return cloud.logout();},createShared(){return cloud.create();},
-  legacyBackup(){const raw=storage.getItem(LEGACY_KEY);if(!raw)return null;const data=JSON.parse(raw);delete data.images;return data;},
+  lastChange:false,
+  load(){return {...read(),role:viewRole(search())};},
+  legacyBackup(){const raw=storage.getItem(LEGACY_KEY);if(!raw)return null;const copy=JSON.parse(raw);delete copy.images;return copy;},
+  backup(){return {current:storage.getItem(LOCAL_KEY),previousPreferences:storage.getItem(PREFS_KEY),previousGame:storage.getItem(LEGACY_KEY)};},
   async transact(fn){
-   const run=async()=>{
-    const before=this.load(),next=fn(structuredClone(before));
-    if(next.images)throw Error('画像はassetsから読み込みます。端末には保存しません。');
-    if(JSON.stringify(extractShared(before))!==JSON.stringify(extractShared(next)))await cloud.transact(before,next);
-    const prefs=Object.fromEntries(localKeys.map(k=>[k,next[k]]));storage.setItem(LOCAL_KEY,JSON.stringify(prefs));return this.load();
+   const work=async()=>{
+    const before=this.load(),next=fn(structuredClone(before));delete next.images;validateLocal(next);
+    const value=serialize(next);this.lastChange=JSON.stringify(serialize(before))!==JSON.stringify(value);
+    // setItem is atomic: on failure the previous complete save stays intact.
+    storage.setItem(LOCAL_KEY,JSON.stringify(value));return {...next,role:viewRole(search())};
    };
-   const serialized=()=>{const task=queue.then(run,run);queue=task.catch(()=>{});return task;};
+   const serialized=()=>{const task=queue.then(work,work);queue=task.catch(()=>{});return task;};
    if(typeof navigator!=='undefined'&&navigator.locks)return navigator.locks.request(LOCAL_KEY,serialized);
    return serialized();
   }
