@@ -14,7 +14,7 @@ function harness(options={}){
  return {async setRole(role){location.search='?role='+role;windowListeners.storage();},async runTo(ms){const target=base+ms;while(true){const due=[...timeouts].filter(([,t])=>t.at<=target).sort((a,b)=>a[1].at-b[1].at)[0];if(!due)break;timeouts.delete(due[0]);virtual=due[1].at;await due[1].fn();}virtual=target;},animate(ms){virtual=base+ms;const callbacks=raf.splice(0);callbacks.forEach(fn=>fn(ms));},growthNumbers,growthBars,html:()=>html,modal:()=>modal,clock,error,count,inputs,writes:()=>writes,scroll:()=>scroll,failSave:()=>{fail=true;},async submit(fields){await listeners.submit({target:{id:'itinerary-editor',fields},preventDefault(){}});},async check(id,checked){const input=inputs[id];input.checked=checked;await listeners.change({target:input});},async click(dataset={},id='',dismiss=false){await listeners.click({target:{closest(){return {dataset,id,hasAttribute:()=>dismiss};}},preventDefault(){}});},tick(){timers.forEach(fn=>fn());},state:()=>JSON.parse(JSON.stringify(vm.runInContext('repository.load()',context)))};
 }
 test('five screens, demo clock, notification and shared growth still work',async()=>{
- const h=harness();assert.match(h.html(),/NEXT ACTION/);for(const page of ['quest','status','item','settings']){await h.click({page});assert.match(h.html(),/メインメニュー/);}
+ const h=harness({role:'bride'});assert.match(h.html(),/NEXT ACTION/);for(const page of ['quest','status','item','settings']){await h.click({page});assert.match(h.html(),/メインメニュー/);}
  await h.click({},'setclock');await h.click({page:'quest'});h.tick();assert.match(h.modal(),/NEW QUEST UNLOCKED/);
  const before=h.writes();await h.click({},'',true);assert.equal(h.writes(),before);assert.equal(h.state().ack.length,1);
  await h.click({page:'status'});await h.click({event:'d1-bath'});assert.match(h.modal(),/LEVEL UP!/);assert.equal(h.state().players.bride.hp[1],130);
@@ -28,13 +28,19 @@ test('failed item storage rolls the checkbox and count back without rebuilding t
  const h=harness();await h.click({page:'item'});await h.check(0,true);const writes=h.writes();h.failSave();await h.check(1,true);
  assert.equal(h.inputs[1].checked,false);assert.equal(h.inputs[1].disabled,false);assert.equal(h.inputs[0].checked,true);assert.equal(h.count.textContent,'1 / 14');assert.equal(h.error.hidden,false);assert.match(h.error.textContent,/保存できません/);assert.equal(h.writes(),writes);assert.deepEqual(h.state().items,[0]);
 });
-test('switching bus plans updates real schedules and warning without exposing future park names',async()=>{
- const h=harness();await h.click({page:'settings'});h.clock.value='2026-11-01T14:16';await h.click({},'setclock');await h.click({page:'home'});assert.match(h.html(),/14:20/);assert.match(h.html(),/16:04のバスを逃すと帰還が困難/);assert.match(h.html(),/15:50/);assert.ok(!h.html().includes('まきば公園'));
- await h.click({page:'quest'});await h.click({day:'2'});await h.click({bus:'late'});assert.equal(h.state().plan.bus,'late');await h.click({page:'home'});assert.match(h.html(),/15:10/);assert.ok(!h.html().includes('まきば公園'));
+test('warning appears at 14:00 while open and bus selection UI is absent',async()=>{
+ const h=harness({role:'bride'});await h.click({page:'settings'});h.clock.value='2026-11-01T13:59';await h.click({},'setclock');await h.click({page:'home'});h.tick();
+ assert.ok(!h.html().includes('class="bus-warning"'));await h.click({},'',true);await h.runTo(60000);h.tick();assert.match(h.html(),/バスの時間がやばいよ！/);assert.match(h.html(),/15:50/);
+ await h.click({page:'quest'});await h.click({day:'2'});assert.ok(!h.html().includes('data-bus='));assert.ok(!h.html().includes('15:10'));assert.match(h.html(),/14:20/);
 });
-
+test('groom cannot see or activate demo controls; bride can use them',async()=>{
+ const h=harness();await h.click({page:'settings'});assert.ok(!h.html().includes('id="clock"'));assert.ok(!h.html().includes('id="setclock"'));
+ await h.click({},'setclock');assert.ok(!h.html().includes('DEMO TIME'));
+ await h.setRole('bride');assert.match(h.html(),/id="clock"/);await h.click({},'setclock');assert.match(h.html(),/DEMO TIME/);
+ await h.setRole('groom');assert.ok(!h.html().includes('DEMO TIME'));assert.ok(!h.html().includes('id="clock"'));
+});
 test('bride editor saves real row changes and the groom display masks custom future details',async()=>{
- const h=harness();await h.click({page:'settings'});await h.setRole('bride');await h.click({page:'quest'});await h.click({day:'2'});assert.match(h.html(),/サンダンス/);await h.click({editAction:'a2-lunch'});assert.match(h.modal(),/ITINERARY EDITOR/);
+ const h=harness();await h.click({page:'settings'});await h.setRole('bride');await h.click({page:'quest'});await h.click({day:'2'});assert.match(h.html(),/昼食タイム！/);await h.click({editAction:'a2-lunch'});assert.match(h.modal(),/ITINERARY EDITOR/);
  await h.submit({time:'12:30',detail:'新しい昼食会場',safeText:'昼食',note:'混雑状況を確認',safeNote:'昼食予定',revealTime:'11:04'});assert.equal(h.state().plan.actions['a2-lunch'].time,'12:30');assert.match(h.html(),/12:30/);
  await h.click({page:'settings'});await h.setRole('groom');await h.click({page:'quest'});await h.click({day:'2'});assert.ok(!h.html().includes('新しい昼食会場'));
 });
@@ -42,16 +48,16 @@ test('rapid independent checks preserve all pending selections without DOM repla
  const h=harness();await h.click({page:'item'});const writes=h.writes();await Promise.all([h.check(0,true),h.check(1,true),h.check(2,true)]);assert.equal(h.writes(),writes);assert.equal(h.count.textContent,'3 / 14');assert.deepEqual(h.state().items,[0,1,2]);
 });
 
-test('opening shows PNGs and petals, changes at 8/17s, and automatically saves/returns HOME at 22s',async()=>{
+test('opening shows PNGs and petals, changes at 5/11s, and automatically saves/returns HOME at 15s',async()=>{
  const h=harness({seen:false});assert.match(h.modal(),/MAIN QUEST CLEAR!/);assert.match(h.modal(),/character_hanayome_01_black.png/);assert.match(h.modal(),/character_hanamuko_gray_black.png/);assert.match(h.modal(),/petal/);
- await h.runTo(7999);assert.match(h.modal(),/MAIN QUEST CLEAR!/);await h.runTo(8000);assert.match(h.modal(),/おうちへ帰還/);assert.match(h.modal(),/intro-gauge/);
- await h.runTo(17000);assert.match(h.modal(),/NEW QUEST UNLOCKED/);await h.runTo(22000);assert.match(h.html(),/NEXT ACTION/);assert.equal(h.modal(),'');assert.equal(h.state().seen,true);
+ await h.runTo(4999);assert.match(h.modal(),/MAIN QUEST CLEAR!/);await h.runTo(5000);assert.match(h.modal(),/おうちへ帰還/);assert.match(h.modal(),/intro-gauge/);
+ await h.runTo(11000);assert.match(h.modal(),/NEW QUEST UNLOCKED/);await h.runTo(15000);assert.match(h.html(),/NEXT ACTION/);assert.equal(h.modal(),'');assert.equal(h.state().seen,true);
 });
 test('reduced motion keeps the same automatic duration and skip/replay preserve saves',async()=>{
- const h=harness({seen:false,motion:false});await h.runTo(22000);assert.equal(h.modal(),'');assert.equal(h.state().seen,true);await h.click({page:'item'});await h.check(0,true);await h.click({page:'settings'});await h.click({},'replay');assert.match(h.modal(),/MAIN QUEST CLEAR!/);await h.click({},'skip');assert.match(h.html(),/NEXT ACTION/);assert.deepEqual(h.state().items,[0]);
+ const h=harness({seen:false,motion:false});await h.runTo(15000);assert.equal(h.modal(),'');assert.equal(h.state().seen,true);await h.click({page:'item'});await h.check(0,true);await h.click({page:'settings'});await h.click({},'replay');assert.match(h.modal(),/MAIN QUEST CLEAR!/);await h.click({},'skip');assert.match(h.html(),/NEXT ACTION/);assert.deepEqual(h.state().items,[0]);
 });
 test('growth popup counts maximums and fills gauges without changing saved rewards again',async()=>{
- const h=harness();await h.click({page:'settings'});await h.click({},'setclock');await h.click({page:'status'});await h.click({event:'d1-bath'});assert.match(h.modal(),/最大HP/);assert.match(h.modal(),/＋30/);assert.match(h.modal(),/data-growth-count/);
+ const h=harness({role:'bride'});await h.click({page:'settings'});await h.click({},'setclock');await h.click({page:'status'});await h.click({event:'d1-bath'});assert.match(h.modal(),/最大HP/);assert.match(h.modal(),/＋30/);assert.match(h.modal(),/data-growth-count/);
  h.animate(700);assert.ok(+h.growthNumbers[0].textContent>100);assert.ok(+h.growthNumbers[0].textContent<130);h.animate(1400);assert.equal(+h.growthNumbers[0].textContent,130);assert.equal(h.growthBars[0].style.width,'100%');assert.equal(h.state().players.bride.hp[1],130);
 });
 test('repository PNG paths are used everywhere; no upload control or URL role buttons remain',async()=>{

@@ -13,11 +13,7 @@ const baseActions=itineraryDefaults.actions;
 const baseQuests=itineraryDefaults.quests;
 export function configureSchedule(plan={}) {
  const rows=structuredClone(baseActions);
- const late=plan.bus==='late';
- if(late){
-  for(const [id,time] of [['a2-10','15:10'],['a2-11','15:19'],['a2-12','15:20']])rows.find(a=>a.id===id).time=time;
-  for(const a of rows)if(a.day===2&&a.revealTime==='14:29')a.revealTime='15:19';
- }
+ // 旧セーブのbus:'late'は保持しますが、旅程には適用しません。
  for(const a of rows){
   const patch=plan.actions?.[a.id]||{};
   Object.assign(a,patch);a.custom=Boolean(patch.detail||patch.note);
@@ -35,8 +31,7 @@ configureSchedule();
 // Separate instances: multiple occurrences of an effect are independent.
 export const recoveryEvents=[
 ['d1-rest','rest',1,'17:00','q1-1'],['d1-meal','meal',1,'21:00','q1-2'],['d1-bath','bath',1,'21:00','q1-2'],['d1-sleep','sleep',2,'09:00','q1-2'],
-['d2-view','view',2,'12:00','q2-0'],['d2-snack','meal',2,'14:00','q2-1'],['d2-rest','rest',2,'18:00','q2-3'],['d2-meal','meal',2,'21:00','q2-3'],['d2-bath','bath',2,'21:00','q2-3'],['d2-sleep','sleep',3,'09:00','q2-3'],
-['d3-meal','meal',3,'09:00','q3-0'],['d3-rest','rest',3,'09:00','q3-0']
+['d2-view','view',2,'12:00','q2-0'],['d2-snack','meal',2,'14:00','q2-1'],['d2-rest','rest',2,'18:00','q2-3'],['d2-meal','meal',2,'21:00','q2-3'],['d2-bath','bath',2,'21:00','q2-3']
 ].map(([id,effect,day,time,questId])=>({id,effect,day,availableAt:at(day,time),questId}));
 export const statusPrompts=dates.map((date,i)=>({id:`night-${date}`,date,at:at(i+1,i===2?'15:00':'21:00')}));
 // Names become known at their first planned visit. Routes may contain both known and secret names.
@@ -56,10 +51,7 @@ export const growthRewards={
  'd2-snack':{max:{hp:25,joy:40},current:{hp:40,hunger:-35,joy:40}},
  'd2-rest':{max:{mp:60},current:{mp:120}},
  'd2-meal':{max:{hp:50,joy:60},current:{hp:80,hunger:-50,joy:60}},
- 'd2-bath':{max:{hp:100,mp:20},current:{hp:180,mp:50}},
- 'd2-sleep':{max:{hp:150,mp:100},current:{hp:250,mp:180}},
- 'd3-meal':{max:{hp:25,joy:80},current:{hp:60,hunger:-50,joy:80}},
- 'd3-rest':{max:{mp:100,joy:40},current:{mp:200,joy:40}}
+ 'd2-bath':{max:{hp:100,mp:20},current:{hp:180,mp:50}}
 };
 export function eventEffect(event){return {...effects.find(e=>e.id===event.effect),...growthRewards[event.id]};}
-export const openingTiming={homecoming:8000,unlock:17000,end:22000};
+export const openingTiming={homecoming:5000,unlock:11000,end:15000};

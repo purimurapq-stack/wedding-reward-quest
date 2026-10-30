@@ -20,6 +20,7 @@ export const actionNote=(a,role,now)=>role==='bride'?a.note:a.custom&&!unlocked(
 export const questTitle=(q,role,now)=>role==='bride'||unlocked(q,now)?q.title:'ひみつのクエスト';
 export const returnBus=()=>actions.find(a=>a.id==='a2-13');
 export const returnTarget=()=>actions.find(a=>a.id==='a2-return-ready');
+export const showBusWarning=now=>tokyoDate(now)==='2026-11-01'&&now>=Date.parse('2026-11-01T14:00:00+09:00')&&now<=Date.parse(returnBus().at)+60000;
 export function editPlan(state,kind,id,patch){
  if(state.role!=='bride')throw Error('旅程の編集は新婦モードで行ってください');
  for(const key of ['time','revealTime'])if(patch[key]!==undefined&&!/^([01]\d|2[0-3]):[0-5]\d$/.test(patch[key]))throw Error('時刻を確認してください');
