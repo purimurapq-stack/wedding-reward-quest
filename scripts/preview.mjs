@@ -1,6 +1,6 @@
-import {readFile,writeFile,mkdir} from 'node:fs/promises';
+import {readFile,writeFile,mkdir,readdir} from 'node:fs/promises';
 const parts=[];
-for(const name of ['itinerary','data','domain','storage','visuals','app']){
+for(const name of ['itinerary','data','domain','storage','home','visuals','app']){
  let source=await readFile(`src/${name}.js`,'utf8');
  source=source.replace(/import \{[^}]*\} from '[^']+';/g,'').replace(/\bexport\s+(?=(?:const|function|class)\b)/g,'');
  parts.push(source);
@@ -10,6 +10,11 @@ for(const name of ['character_hanamuko_gray_black.png','character_hanayome_01_bl
  const path=`./assets/characters/${name}`;
  try{const bytes=await readFile(path);js=js.split(path).join(`data:image/png;base64,${bytes.toString('base64')}`);}
  catch(e){if(e.code!=='ENOENT')throw e;js=js.split(path).join('data:image/png;base64,');console.log(`元PNG未配置: ${name}`);}
+}
+
+for(const name of await readdir('assets/backgrounds'))if(name.endsWith('.svg')){
+ const path=`./assets/backgrounds/${name}`,bytes=await readFile(path);
+ js=js.split(path).join(`data:image/svg+xml;base64,${bytes.toString('base64')}`);
 }
 
 let html=await readFile('index.html','utf8');

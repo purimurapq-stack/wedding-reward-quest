@@ -1,5 +1,5 @@
 import test from 'node:test';import assert from 'node:assert/strict';
-import {fresh,applyEvent,setCurrent,unlocked,tripDay,tokyoDate,nextAction,actionText,clearQuest,questState,notifications,migrate,actionNote,maskText,editPlan} from '../src/domain.js';
+import {fresh,applyEvent,setCurrent,unlocked,tripDay,tokyoDate,nextAction,actionText,clearQuest,questState,notifications,migrate,actionNote,maskText,editPlan,showBusWarning} from '../src/domain.js';
 import {quests,actions,recoveryEvents,statusPrompts,configureSchedule,eventEffect,openingTiming} from '../src/data.js';
 const time=s=>Date.parse(s+'+09:00');
 test('scheduled independent events, shared growth, clamping and duplicate idempotency',()=>{
@@ -45,11 +45,15 @@ test('previously visited stations remain visible on the return journey; future p
  assert.ok(!actionText(park,'groom',before).includes('まきば公園'));
  assert.ok(actionText(park,'groom',Date.parse(actions.find(a=>a.id==='a2-11').at)).includes('まきば公園'));
 });
-test('bus candidate switches departure, arrival, reveal and next action together',()=>{
- configureSchedule();assert.equal(actions.find(a=>a.id==='a2-10').time,'14:20');
- configureSchedule({bus:'late'});assert.equal(actions.find(a=>a.id==='a2-10').time,'15:10');assert.equal(actions.find(a=>a.id==='a2-11').time,'15:19');
- const t=time('2026-11-01T14:30:00');assert.ok(!maskText('まきば公園','groom',t).includes('まきば公園'));assert.equal(nextAction(t).id,'a2-10');
- assert.equal(quests.find(q=>q.id==='q2-2').revealAt.slice(11,16),'15:19');configureSchedule();
+test('fixed 14:20 bus ignores legacy late choice without modifying saved plan',()=>{
+ const plan={bus:'late'};configureSchedule(plan);
+ assert.equal(actions.find(a=>a.id==='a2-10').time,'14:20');assert.equal(actions.find(a=>a.id==='a2-11').time,'14:29');
+ assert.equal(quests.find(q=>q.id==='q2-2').revealAt.slice(11,16),'14:29');assert.equal(plan.bus,'late');configureSchedule();
+});
+test('bus warning starts exactly at 14:00 JST on day two only',()=>{
+ for(const value of ['2026-10-31T14:00:00','2026-11-01T09:00:00','2026-11-01T13:59:59','2026-11-02T14:00:00'])assert.equal(showBusWarning(time(value)),false,value);
+ assert.equal(showBusWarning(time('2026-11-01T14:00:00')),true);assert.equal(showBusWarning(time('2026-11-01T15:50:00')),true);
+ assert.equal(showBusWarning(time('2026-11-01T16:05:01')),false);
 });
 test('bride edits time, details and lunch; groom edits are rejected and persisted custom names remain hidden',()=>{
  const s=fresh();assert.throws(()=>editPlan(s,'actions','a2-lunch',{time:'12:30'}));s.role='bride';
@@ -64,19 +68,30 @@ test('all future place names and private notes are consistently masked; first vi
  const deadline=actions.find(a=>a.id==='a2-return-ready');assert.equal(deadline.time,'15:50');assert.equal(actions.find(a=>a.id==='a2-13').time,'16:04');
 });
 
-test('growth ramps from early to late and reaches HP580/MP505 with a complete trip',()=>{
+test('growth ramps from early to late and reaches HP430/MP405 with a complete trip',()=>{
  const early=eventEffect(recoveryEvents.find(e=>e.id==='d1-rest'));
  const middle=eventEffect(recoveryEvents.find(e=>e.id==='d2-bath'));
- const late=eventEffect(recoveryEvents.find(e=>e.id==='d2-sleep'));
- assert.equal(early.max.hp,25);assert.equal(middle.max.hp,100);assert.equal(late.max.hp,150);assert.equal(late.max.mp,100);
+ const late=eventEffect(recoveryEvents.find(e=>e.id==='d2-bath'));
+ assert.equal(early.max.hp,25);assert.equal(middle.max.hp,100);assert.equal(late.max.hp,100);assert.equal(late.max.mp,20);
  let s=fresh();for(const event of recoveryEvents)s=applyEvent(s,event.id,Date.parse('2026-11-03T00:00:00+09:00'));
- for(const role of ['groom','bride']){assert.equal(s.players[role].hp[1],580);assert.equal(s.players[role].mp[1],505);assert.equal(s.players[role].joy[1],410);for(const [current,max] of Object.values(s.players[role]))assert.ok(current>=0&&current<=max);}
+ for(const role of ['groom','bride']){assert.equal(s.players[role].hp[1],430);assert.equal(s.players[role].mp[1],405);assert.equal(s.players[role].joy[1],410);for(const [current,max] of Object.values(s.players[role]))assert.ok(current>=0&&current<=max);}
  assert.equal(Object.keys(s.rewardHistory).length,recoveryEvents.length);
 });
 test('legacy saves preserve every value and completed event without retroactive growth',()=>{
  const old={...fresh(),players:{groom:{hp:[60,110],mp:[30,80],hunger:[10,100],joy:[100,100]},bride:{hp:[50,110],mp:[20,80],hunger:[10,100],joy:[100,100]}},done:['d1-bath'],items:[1,3],seen:true,ack:['groom:quest:q1-0'],plan:{bus:'late'},logs:{'2026-10-31:groom':{hp:60}},questClears:{'q1-0':'2026-10-31T15:00:00Z'}};
  const migrated=migrate(JSON.parse(JSON.stringify(old)));assert.deepEqual(migrated,old);
  assert.deepEqual(applyEvent(migrated,'d1-bath',Date.parse('2026-11-03T00:00:00+09:00')),old);
- const next=applyEvent(migrated,'d2-sleep',Date.parse('2026-11-03T00:00:00+09:00'));assert.equal(next.players.groom.hp[1],260);assert.equal(next.players.groom.mp[1],180);assert.deepEqual(next.items,old.items);assert.deepEqual(next.logs,old.logs);assert.deepEqual(next.questClears,old.questClears);
+ const next=applyEvent(migrated,'d2-bath',Date.parse('2026-11-03T00:00:00+09:00'));assert.equal(next.players.groom.hp[1],210);assert.equal(next.players.groom.mp[1],100);assert.deepEqual(next.items,old.items);assert.deepEqual(next.logs,old.logs);assert.deepEqual(next.questClears,old.questClears);
 });
-test('opening scene boundaries are 8/17/22 seconds',()=>{assert.deepEqual(openingTiming,{homecoming:8000,unlock:17000,end:22000});});
+test('opening scene boundaries are 5/11/15 seconds',()=>{assert.deepEqual(openingTiming,{homecoming:5000,unlock:11000,end:15000});});
+
+test('updated departure, flexible lunch, homeward travel and natural final-day recovery only',()=>{
+ configureSchedule();assert.equal(actions.find(a=>a.id==='a1-0').detail,'10時くらいに家を出る');
+ assert.equal(actions.find(a=>a.id==='a2-lunch').detail,'昼食タイム！');
+ assert.ok(!JSON.stringify(actions).includes('未購入'));assert.ok(!JSON.stringify(actions).includes('サンダンス'));
+ assert.deepEqual(actions.filter(a=>a.day===3).map(a=>a.id),['a3-0','a3-1','a3-2','a3-3','a3-4','a3-5','a3-6','a3-7','a3-8']);
+ assert.deepEqual(recoveryEvents.filter(e=>e.day===3).map(e=>e.id),['d3-meal','d3-rest']);const s=fresh();
+ for(const id of ['d2-sleep','d3-bath'])assert.deepEqual(applyEvent(s,id,time('2026-11-02T21:00:00')),s);
+ for(const id of ['a3-3','a3-4','a3-5','a3-6','a3-7']){const row=actions.find(a=>a.id===id);assert.equal(actionText(row,'groom',time('2026-11-02T09:00:00')),row.detail);}
+ assert.ok(!notifications(s,time('2026-11-02T15:00:00')).some(n=>['d2-sleep','d3-bath'].includes(n.ref)));
+});

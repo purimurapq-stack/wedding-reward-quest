@@ -20,6 +20,7 @@ export const actionNote=(a,role,now)=>role==='bride'?a.note:a.custom&&!unlocked(
 export const questTitle=(q,role,now)=>role==='bride'||unlocked(q,now)?q.title:'ひみつのクエスト';
 export const returnBus=()=>actions.find(a=>a.id==='a2-13');
 export const returnTarget=()=>actions.find(a=>a.id==='a2-return-ready');
+export const showBusWarning=now=>tokyoDate(now)==='2026-11-01'&&now>=Date.parse('2026-11-01T14:00:00+09:00')&&now<=Date.parse(returnBus().at)+60000;
 export function editPlan(state,kind,id,patch){
  if(state.role!=='bride')throw Error('旅程の編集は新婦モードで行ってください');
  for(const key of ['time','revealTime'])if(patch[key]!==undefined&&!/^([01]\d|2[0-3]):[0-5]\d$/.test(patch[key]))throw Error('時刻を確認してください');
@@ -29,5 +30,5 @@ export function editPlan(state,kind,id,patch){
 }
 export const nextAction=(now)=>actions.find(a=>Date.parse(a.at)>now);
 export function setCurrent(state,role,values,date){const next=structuredClone(state);for(const [k,v] of Object.entries(values)){if(!next.players[role]?.[k]||!Number.isFinite(v))throw Error('入力値を確認してください');next.players[role][k][0]=Math.max(0,Math.min(next.players[role][k][1],Math.round(v)));}next.logs[`${date}:${role}`]={...values};return next;}
-export function notifications(s,now){const entries=[...quests.filter(q=>unlocked(q,now)).map(q=>({id:`quest:${q.id}`,type:q.final?'final':'quest',ref:q.id,title:q.final?'QUEST COMPLETE!':'NEW QUEST UNLOCKED!',text:questTitle(q,s.role,now)})),...recoveryEvents.filter(e=>Date.parse(e.availableAt)<=now&&!s.done.includes(e.id)).map(e=>({id:`event:${e.id}`,type:'event',ref:e.id,title:'今日もおつかれさま！',text:effects.find(f=>f.id===e.effect).name+'？'})),...statusPrompts.filter(p=>Date.parse(p.at)<=now&&!s.logs[`${p.date}:${s.role}`]).map(p=>({id:`status:${p.date}`,type:'status',ref:p.date,title:"TODAY’S STATUS",text:'今日の冒険はどうだった？'}))];return entries.filter(n=>!s.ack.includes(`${s.role}:${n.id}`));}
+export function notifications(s,now){const entries=[...quests.filter(q=>unlocked(q,now)).map(q=>({id:`quest:${q.id}`,type:q.final?'final':'quest',ref:q.id,title:q.final?'QUEST COMPLETE!':'NEW QUEST UNLOCKED!',text:questTitle(q,s.role,now)})),...recoveryEvents.filter(e=>Date.parse(e.availableAt)<=now&&!s.done.includes(e.id)).map(e=>({id:`event:${e.id}`,type:'event',ref:e.id,title:'今日もおつかれさま！',text:eventEffect(e).name+'？'})),...statusPrompts.filter(p=>Date.parse(p.at)<=now&&!s.logs[`${p.date}:${s.role}`]).map(p=>({id:`status:${p.date}`,type:'status',ref:p.date,title:"TODAY’S STATUS",text:'今日の冒険はどうだった？'}))];return entries.filter(n=>!s.ack.includes(`${s.role}:${n.id}`));}
 export function migrate(s){if(s.version===1){const next={...fresh(),...s,version:2,questClears:{},ack:[],plan:{}};next.done=recoveryEvents.filter(e=>s.done.includes(`${e.id.slice(1,2)}:${e.effect}`)&&e.id===`d${e.id.slice(1,2)}-${e.effect}`).map(e=>e.id);return next;}return {...s,plan:s.plan||{}};}

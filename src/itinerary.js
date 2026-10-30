@@ -3,6 +3,18 @@ export const itineraryDefaults={
   "hotel": "グランドメルキュール八ヶ岳リゾート＆スパ",
   "actions": [
     {
+      "id": "a1-0",
+      "day": 1,
+      "time": "10:00",
+      "safeText": "10時くらいに家を出る",
+      "detail": "10時くらいに家を出る",
+      "questId": "q1-0",
+      "note": "時刻は目安",
+      "safeNote": "時刻は目安",
+      "revealTime": "10:00",
+      "needsVerification": false
+    },
+    {
       "id": "a1-1",
       "day": 1,
       "time": "10:24",
@@ -174,8 +186,8 @@ export const itineraryDefaults={
       "id": "a2-lunch",
       "day": 2,
       "time": "12:00",
-      "safeText": "昼食・混雑時は時刻を調整",
-      "detail": "センターハウスのレストラン「サンダンス」で昼食",
+      "safeText": "昼食タイム！",
+      "detail": "昼食タイム！",
       "questId": "q2-0",
       "note": "12時頃が目安。混雑に応じて変更可。13:10発のバスに注意。",
       "safeNote": "仮予定・要確認",
@@ -246,11 +258,11 @@ export const itineraryDefaults={
       "id": "a2-9",
       "day": 2,
       "time": "14:15",
-      "safeText": "バスを乗り換え・第一候補の出発まで5分",
+      "safeText": "バスを乗り換え・14:20の出発まで5分",
       "detail": "清里駅に到着・大泉周遊ルートへ乗り換え",
       "questId": "q2-2",
-      "note": "14:20発まで5分。間に合わなければ15:10発へ変更。",
-      "safeNote": "乗り換え時間は5分。間に合わなければ15:10発へ変更。",
+      "note": "14:20発まで5分。乗り換えに備えよう。",
+      "safeNote": "14:20発まで5分。乗り換えに備えよう。",
       "revealTime": "14:15",
       "needsVerification": true
     },
@@ -261,7 +273,7 @@ export const itineraryDefaults={
       "safeText": "清里ピクニックバスに乗車（大泉周遊ルート）",
       "detail": "清里駅からまきば公園へ（清里ピクニックバス・大泉周遊ルート）",
       "questId": "q2-2",
-      "note": "第一候補14:20発→14:29着／代替15:10発→15:19着",
+      "note": "14:20発→14:29着",
       "safeNote": "仮予定・要確認",
       "revealTime": "14:29",
       "needsVerification": true
@@ -285,7 +297,7 @@ export const itineraryDefaults={
       "safeText": "高原の景色・動物・散策・記念撮影",
       "detail": "まきば公園で高原の景色・動物・散策・記念撮影",
       "questId": "q2-2",
-      "note": "第一候補なら14:29〜16:04、代替便なら15:19〜16:04。15:50までにバス停へ。",
+      "note": "滞在14:29〜16:04。15:50までにバス停へ。",
       "safeNote": "15:50までにバス停へ戻ろう。16:04発は必ず乗りたい便。",
       "revealTime": "14:29",
       "needsVerification": true
@@ -345,8 +357,8 @@ export const itineraryDefaults={
       "safeText": "ホテルで朝食",
       "detail": "ホテルで朝食",
       "questId": "q3-0",
-      "note": "朝・時刻は目安",
-      "safeNote": "仮予定・要確認",
+      "note": "朝食の時刻は目安",
+      "safeNote": "朝食の時刻は目安",
       "revealTime": "08:00",
       "needsVerification": true
     },
@@ -354,11 +366,11 @@ export const itineraryDefaults={
       "id": "a3-1",
       "day": 3,
       "time": "09:00",
-      "safeText": "ホテルで最後の休憩",
-      "detail": "ホテルで最後のリラックスタイム",
+      "safeText": "ホテルでゆっくり過ごす",
+      "detail": "ホテルでゆっくり過ごす",
       "questId": "q3-0",
-      "note": "午前・時刻は目安",
-      "safeNote": "仮予定・要確認",
+      "note": "チェックアウトまで、ふたりのペースで",
+      "safeNote": "チェックアウトまで、ふたりのペースで",
       "revealTime": "09:00",
       "needsVerification": true
     },
@@ -417,7 +429,7 @@ export const itineraryDefaults={
       "safeText": "特急列車に乗り換え",
       "detail": "小淵沢駅から特急あずさに乗車",
       "questId": "q3-1",
-      "note": "復路指定席は未購入（計画時点）。要確認。",
+      "note": "",
       "safeNote": "仮予定・要確認",
       "revealTime": "13:52",
       "needsVerification": true
@@ -454,6 +466,7 @@ export const itineraryDefaults={
       "title": "冒険の始まり",
       "revealTime": "14:07",
       "actionIds": [
+        "a1-0",
         "a1-1",
         "a1-2",
         "a1-3",
@@ -542,7 +555,7 @@ export const itineraryDefaults={
     {
       "id": "q3-0",
       "day": 3,
-      "title": "最後の回復",
+      "title": "朝ごはんと、旅の余韻を楽しもう！",
       "revealTime": "09:00",
       "actionIds": [
         "a3-0",
