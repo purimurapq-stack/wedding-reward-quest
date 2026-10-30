@@ -351,6 +351,30 @@ export const itineraryDefaults={
       "needsVerification": true
     },
     {
+      "id": "a3-0",
+      "day": 3,
+      "time": "08:00",
+      "safeText": "ホテルで朝食",
+      "detail": "ホテルで朝食",
+      "questId": "q3-0",
+      "note": "朝食の時刻は目安",
+      "safeNote": "朝食の時刻は目安",
+      "revealTime": "08:00",
+      "needsVerification": true
+    },
+    {
+      "id": "a3-1",
+      "day": 3,
+      "time": "09:00",
+      "safeText": "ホテルでゆっくり過ごす",
+      "detail": "ホテルでゆっくり過ごす",
+      "questId": "q3-0",
+      "note": "チェックアウトまで、ふたりのペースで",
+      "safeNote": "チェックアウトまで、ふたりのペースで",
+      "revealTime": "09:00",
+      "needsVerification": true
+    },
+    {
       "id": "a3-2",
       "day": 3,
       "time": "11:00",
@@ -531,9 +555,11 @@ export const itineraryDefaults={
     {
       "id": "q3-0",
       "day": 3,
-      "title": "帰り支度を整えよう！",
+      "title": "朝ごはんと、旅の余韻を楽しもう！",
       "revealTime": "09:00",
       "actionIds": [
+        "a3-0",
+        "a3-1",
         "a3-2"
       ],
       "final": false

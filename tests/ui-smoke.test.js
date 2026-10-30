@@ -1,7 +1,7 @@
 // Minimal DOM harness. Browser rendering and real-device tests remain separate.
 import test from 'node:test';import assert from 'node:assert/strict';import vm from 'node:vm';import {readFileSync} from 'node:fs';import {fresh} from '../src/domain.js';
 function harness(options={}){
- const listeners={},timers=[],timeouts=new Map(),raf=[];let html='',modal='',writes=0,fail=false,scroll=0,timeoutId=0;const base=Date.parse('2026-10-29T00:00:00+09:00');let virtual=base;class Clock extends Date{static now(){return virtual;}}
+ const listeners={},timers=[],timeouts=new Map(),raf=[];let html='',modal='',writes=0,fail=false,scroll=0,timeoutId=0;const base=Date.parse(options.now||'2026-10-29T00:00:00+09:00');let virtual=base;class Clock extends Date{static now(){return virtual;}}
  const saved=fresh();saved.seen=options.seen??true;saved.motion=options.motion??true;const memory=new Map([['reward-quest-v1',JSON.stringify(saved)]]);
  const clock={value:'2026-11-01T21:00'},count={textContent:''},error={hidden:true,textContent:''};
  const inputs=Array.from({length:14},(_,i)=>({dataset:{item:String(i)},checked:false,disabled:false}));
@@ -10,7 +10,7 @@ function harness(options={}){
  const windowListeners={};const location={search:options.role==='bride'?'?role=bride':'',protocol:'https:'};
  const context=vm.createContext({location,URLSearchParams,document,window:{scrollY:400,addEventListener(name,fn){windowListeners[name]=fn;},scrollTo(){scroll++;}},localStorage:{getItem:k=>memory.get(k)??null,setItem:(k,v)=>{if(fail){const error=Error('quota');error.name='QuotaExceededError';throw error;}memory.set(k,v);}},navigator:{},matchMedia:()=>({matches:false}),Date:Clock,Intl,structuredClone,Blob,URL,FileReader:class{readAsDataURL(file){this.result=file.data;this.onload();}},Image:class{set src(value){this.onload();}},FormData:function(form){return new Map(Object.entries(form.fields));},setInterval:fn=>{timers.push(fn);},performance:{now:()=>virtual-base},requestAnimationFrame:fn=>{raf.push(fn);return raf.length;},setTimeout:(fn,ms)=>{timeouts.set(++timeoutId,{fn,at:virtual+ms});return timeoutId;},clearTimeout:id=>timeouts.delete(id),console});
  const growthNumbers=[{dataset:{from:'100',to:'130'},textContent:'100'}],growthBars=[{dataset:{from:'76.923'},style:{width:'76.923%'}}];
- const source=['itinerary','data','domain','storage','visuals','app'].map(name=>readFileSync(`src/${name}.js`,'utf8').replace(/import \{[^}]*\} from '[^']+';/g,'').replace(/\bexport\s+(?=(?:const|function|class)\b)/g,'').replace(/export async function/g,'async function')).join('\n');vm.runInContext(source,context);
+ const source=['itinerary','data','domain','storage','home','visuals','app'].map(name=>readFileSync(`src/${name}.js`,'utf8').replace(/import \{[^}]*\} from '[^']+';/g,'').replace(/\bexport\s+(?=(?:const|function|class)\b)/g,'').replace(/export async function/g,'async function')).join('\n');vm.runInContext(source,context);
  return {async setRole(role){location.search='?role='+role;windowListeners.storage();},async runTo(ms){const target=base+ms;while(true){const due=[...timeouts].filter(([,t])=>t.at<=target).sort((a,b)=>a[1].at-b[1].at)[0];if(!due)break;timeouts.delete(due[0]);virtual=due[1].at;await due[1].fn();}virtual=target;},animate(ms){virtual=base+ms;const callbacks=raf.splice(0);callbacks.forEach(fn=>fn(ms));},growthNumbers,growthBars,html:()=>html,modal:()=>modal,clock,error,count,inputs,writes:()=>writes,scroll:()=>scroll,failSave:()=>{fail=true;},async submit(fields){await listeners.submit({target:{id:'itinerary-editor',fields},preventDefault(){}});},async check(id,checked){const input=inputs[id];input.checked=checked;await listeners.change({target:input});},async click(dataset={},id='',dismiss=false){await listeners.click({target:{closest(){return {dataset,id,hasAttribute:()=>dismiss};}},preventDefault(){}});},tick(){timers.forEach(fn=>fn());},state:()=>JSON.parse(JSON.stringify(vm.runInContext('repository.load()',context)))};
 }
 test('five screens, demo clock, notification and shared growth still work',async()=>{
@@ -65,4 +65,20 @@ test('repository PNG paths are used everywhere; no upload control or URL role bu
 });
 test('all status values and recovery events are available without Google login',async()=>{
  const h=harness();assert.match(h.html(),/class="statline"/);assert.ok(!h.html().includes('Googleでログイン'));await h.click({page:'status'});assert.match(h.html(),/class="statline"/);await h.click({page:'settings'});assert.ok(!h.html().includes('id="login"'));assert.match(h.html(),/ログインなし/);
+});
+
+test('both roles see the requested HOME heading, messages and scenery without changing saves',async()=>{
+ for(const role of ['bride','groom']){
+  const h=harness({role,now:'2026-11-01T12:00:00+09:00'}),before=h.state();
+  assert.match(h.html(),/八ヶ岳を大冒険！/);assert.match(h.html(),/絶景を目指して、いざ出発！/);assert.match(h.html(),/backgrounds\/meadow.svg/);assert.deepEqual(h.state(),before);
+ }
+});
+test('HOME updates across noon, 18:00 and JST midnight while open; deferred modal updates are retried',async()=>{
+ for(const [start,title,message,background] of [
+  ['2026-10-31T11:59:59+09:00','冒険のはじまり','新しい景色、新しい冒険！','departure'],
+  ['2026-11-01T17:59:59+09:00','八ヶ岳を大冒険！','今日もたくさん冒険したね！','starlight'],
+  ['2026-11-02T23:59:59+09:00','二人の冒険、クリア！','メインクエスト、クリア！','ending']]){
+  const h=harness({now:start});h.tick();await h.runTo(1000);h.tick();if(h.modal())await h.click({},'',true);h.tick();
+  assert.ok(h.html().includes(title));assert.ok(h.html().includes(message));assert.ok(h.html().includes('backgrounds/'+background+'.svg'));
+ }
 });

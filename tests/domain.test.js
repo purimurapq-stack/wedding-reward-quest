@@ -68,13 +68,13 @@ test('all future place names and private notes are consistently masked; first vi
  const deadline=actions.find(a=>a.id==='a2-return-ready');assert.equal(deadline.time,'15:50');assert.equal(actions.find(a=>a.id==='a2-13').time,'16:04');
 });
 
-test('growth ramps from early to late and reaches HP405/MP305 with a complete trip',()=>{
+test('growth ramps from early to late and reaches HP430/MP405 with a complete trip',()=>{
  const early=eventEffect(recoveryEvents.find(e=>e.id==='d1-rest'));
  const middle=eventEffect(recoveryEvents.find(e=>e.id==='d2-bath'));
  const late=eventEffect(recoveryEvents.find(e=>e.id==='d2-bath'));
  assert.equal(early.max.hp,25);assert.equal(middle.max.hp,100);assert.equal(late.max.hp,100);assert.equal(late.max.mp,20);
  let s=fresh();for(const event of recoveryEvents)s=applyEvent(s,event.id,Date.parse('2026-11-03T00:00:00+09:00'));
- for(const role of ['groom','bride']){assert.equal(s.players[role].hp[1],405);assert.equal(s.players[role].mp[1],305);assert.equal(s.players[role].joy[1],290);for(const [current,max] of Object.values(s.players[role]))assert.ok(current>=0&&current<=max);}
+ for(const role of ['groom','bride']){assert.equal(s.players[role].hp[1],430);assert.equal(s.players[role].mp[1],405);assert.equal(s.players[role].joy[1],410);for(const [current,max] of Object.values(s.players[role]))assert.ok(current>=0&&current<=max);}
  assert.equal(Object.keys(s.rewardHistory).length,recoveryEvents.length);
 });
 test('legacy saves preserve every value and completed event without retroactive growth',()=>{
@@ -85,13 +85,13 @@ test('legacy saves preserve every value and completed event without retroactive 
 });
 test('opening scene boundaries are 5/11/15 seconds',()=>{assert.deepEqual(openingTiming,{homecoming:5000,unlock:11000,end:15000});});
 
-test('updated departure, flexible lunch, homeward travel and no new final-day recovery',()=>{
+test('updated departure, flexible lunch, homeward travel and natural final-day recovery only',()=>{
  configureSchedule();assert.equal(actions.find(a=>a.id==='a1-0').detail,'10時くらいに家を出る');
  assert.equal(actions.find(a=>a.id==='a2-lunch').detail,'昼食タイム！');
  assert.ok(!JSON.stringify(actions).includes('未購入'));assert.ok(!JSON.stringify(actions).includes('サンダンス'));
- assert.deepEqual(actions.filter(a=>a.day===3).map(a=>a.id),['a3-2','a3-3','a3-4','a3-5','a3-6','a3-7','a3-8']);
- assert.ok(!recoveryEvents.some(e=>e.day===3));const s=fresh();
- for(const id of ['d2-sleep','d3-meal','d3-rest'])assert.deepEqual(applyEvent(s,id,time('2026-11-02T21:00:00')),s);
+ assert.deepEqual(actions.filter(a=>a.day===3).map(a=>a.id),['a3-0','a3-1','a3-2','a3-3','a3-4','a3-5','a3-6','a3-7','a3-8']);
+ assert.deepEqual(recoveryEvents.filter(e=>e.day===3).map(e=>e.id),['d3-meal','d3-rest']);const s=fresh();
+ for(const id of ['d2-sleep','d3-bath'])assert.deepEqual(applyEvent(s,id,time('2026-11-02T21:00:00')),s);
  for(const id of ['a3-3','a3-4','a3-5','a3-6','a3-7']){const row=actions.find(a=>a.id===id);assert.equal(actionText(row,'groom',time('2026-11-02T09:00:00')),row.detail);}
- assert.ok(!notifications(s,time('2026-11-02T15:00:00')).some(n=>['d2-sleep','d3-meal','d3-rest'].includes(n.ref)));
+ assert.ok(!notifications(s,time('2026-11-02T15:00:00')).some(n=>['d2-sleep','d3-bath'].includes(n.ref)));
 });
