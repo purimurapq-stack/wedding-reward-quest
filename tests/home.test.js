@@ -25,7 +25,7 @@ test('all seven pixel backgrounds exist with no external resources and can be re
 test('final-day breakfast and relaxation reward once each and use natural notification names',()=>{
  const day3=recoveryEvents.filter(e=>e.day===3);assert.deepEqual(day3.map(e=>e.id),['d3-meal','d3-rest']);assert.ok(day3.every(e=>['meal','rest'].includes(e.effect)));
  let s=fresh();for(const event of day3){const at=Date.parse(event.availableAt);assert.equal(applyEvent(s,event.id,at-1),s);s=applyEvent(s,event.id,at);assert.deepEqual(applyEvent(s,event.id,at),s);}
- assert.equal(s.players.groom.hp[1],125);assert.equal(s.players.groom.mp[1],180);assert.equal(s.players.groom.joy[1],220);
+ assert.equal(s.players.groom.hp[1],125);assert.equal(s.players.groom.mp[1],180);assert.equal(s.players.groom.joy[1],240);
  const texts=notifications(fresh(),jst('2026-11-02T09:00:00')).filter(n=>n.ref.startsWith('d3-')).map(n=>n.text);assert.deepEqual(texts,['ホテルで朝食を食べた？','ホテルでゆっくり過ごした？']);
  const old={...s,done:['d3-meal','d3-rest','d2-sleep']};assert.deepEqual(applyEvent(old,'d3-meal',jst('2026-11-03T09:00:00')),old);
  assert.equal(eventEffect(day3[0]).name,'ホテルで朝食を食べた');

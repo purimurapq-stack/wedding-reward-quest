@@ -1,9 +1,39 @@
-import {initial,effects,actions,quests,recoveryEvents,statusPrompts,locations,eventEffect} from './data.js';
+import {initial,effects,actions,quests,recoveryEvents,statusPrompts,locations,eventEffect,tripStartAt} from './data.js';
 export const fresh=()=>({version:2,players:structuredClone(initial),done:[],items:[],role:'groom',motion:true,seen:false,logs:{},questClears:{},ack:[],plan:{}});
 export const unlocked=(q,now)=>Date.parse(q.revealAt??q.at)<=now;
 export const tokyoDate=now=>new Intl.DateTimeFormat('sv-SE',{timeZone:'Asia/Tokyo'}).format(now);
 export const tripDay=now=>Math.max(1,Math.min(3,Math.floor((Date.parse(tokyoDate(now)+'T00:00:00+09:00')-Date.parse('2026-10-31T00:00:00+09:00'))/86400000)+1));
-export function applyEvent(state,id,now){const event=recoveryEvents.find(e=>e.id===id);if(!event||Date.parse(event.availableAt)>now||state.done.includes(id))return state;const effect=eventEffect(event);const next=structuredClone(state);for(const p of Object.values(next.players))for(const k of Object.keys(p)){p[k][1]+=effect.max[k]||0;p[k][0]=Math.max(0,Math.min(p[k][1],p[k][0]+(effect.current[k]||0)));}next.done.push(id);next.rewardHistory??={};next.rewardHistory[id]={balance:2,at:new Date(now).toISOString(),max:structuredClone(effect.max),current:structuredClone(effect.current)};return next;}
+export function applyEvent(state,id,now){
+ const event=recoveryEvents.find(e=>e.id===id);
+ if(!event||Date.parse(event.availableAt)>now||state.done.includes(id))return state;
+ const effect=eventEffect(event),next=structuredClone(state);
+ // Current HP/MP belong to the user, even if a future reward accidentally includes them.
+ const currentReward=Object.fromEntries(Object.entries(effect.current).filter(([key])=>['hunger','joy'].includes(key)));
+ for(const player of Object.values(next.players))for(const key of Object.keys(player)){
+  player[key][1]+=effect.max[key]||0;
+  if(key==='hp'||key==='mp')continue;
+  player[key][0]=Math.max(0,Math.min(player[key][1],player[key][0]+(currentReward[key]||0)));
+ }
+ next.done.push(id);next.rewardHistory??={};
+ next.rewardHistory[id]={balance:3,at:new Date(now).toISOString(),max:structuredClone(effect.max),current:structuredClone(currentReward)};
+ return next;
+}
+export const canSetStartingCurrent=(state,realNow)=>state.role==='bride'&&Number.isFinite(realNow)&&realNow<Date.parse(tripStartAt)&&!state.done.length&&!Object.keys(state.questClears).length&&!Object.keys(state.logs).length;
+export function setStartingCurrent(state,values,realNow){
+ if(!canSetStartingCurrent(state,realNow))throw Error('旅行前・未達成の新婦モードでのみ現在値を設定できます。');
+ if(!values||Object.keys(values).sort().join(',')!=='bride,groom')throw Error('2人の入力値を確認してください');
+ const next=structuredClone(state);
+ for(const role of ['groom','bride']){
+  const input=values[role];
+  if(!input||Object.keys(input).sort().join(',')!=='hp,joy,mp')throw Error('HP・MP・幸福度を入力してください');
+  for(const key of ['hp','mp','joy']){
+   const value=input[key];
+   if(!Number.isInteger(value)||value<0||value>state.players[role][key][1])throw Error('現在値は0から最大値までの整数で入力してください');
+   next.players[role][key][0]=value;
+  }
+ }
+ return next;
+}
 export function clearQuest(state,id,now){const q=quests.find(q=>q.id===id);if(!q||!unlocked(q,now)||state.questClears[id])return state;return {...state,questClears:{...state.questClears,[id]:new Date(now).toISOString()}};}
 export const questState=(s,q,now)=>s.questClears[q.id]?'clear':unlocked(q,now)?'open':'locked';
 export function maskText(text,role,now){

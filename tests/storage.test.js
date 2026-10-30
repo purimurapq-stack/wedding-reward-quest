@@ -31,3 +31,10 @@ test('removed events and old bus settings retain their existing earned stats and
  saved.players.groom.hp=[300,580];const storage=memory({[LOCAL_KEY]:JSON.stringify(saved)}),repo=createRepository({storage,search:()=>''});
  await repo.transact(s=>({...s,motion:false}));const loaded=repo.load();assert.deepEqual(loaded.players,saved.players);assert.deepEqual(loaded.done,saved.done);assert.deepEqual(loaded.rewardHistory,saved.rewardHistory);assert.deepEqual(loaded.plan,saved.plan);assert.deepEqual(loaded.items,saved.items);assert.deepEqual(loaded.logs,saved.logs);assert.deepEqual(loaded.questClears,saved.questClears);
 });
+
+test('existing full saves never adopt new initial values or retroactively rebalance completed rewards',async()=>{
+ const old={...fresh(),players:{bride:{hp:[30,100],mp:[20,80],joy:[100,100],hunger:[40,100]},groom:{hp:[40,100],mp:[30,80],joy:[100,100],hunger:[40,100]}},done:['d1-rest'],rewardHistory:{'d1-rest':{balance:2,max:{hp:25,mp:25},current:{hp:20,mp:50}}},items:[4],seen:true};
+ for(const key of [LOCAL_KEY,LEGACY_KEY]){
+  const storage=memory({[key]:JSON.stringify(old)}),repo=createRepository({storage,search:()=>''});assert.deepEqual(repo.load().players,old.players);await repo.transact(s=>applyEvent(s,'d1-rest',time));const loaded=repo.load();assert.deepEqual(loaded.players,old.players);assert.deepEqual(loaded.rewardHistory,old.rewardHistory);assert.deepEqual(loaded.done,old.done);assert.deepEqual(loaded.items,old.items);assert.equal(loaded.seen,true);
+ }
+});
