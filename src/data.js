@@ -1,12 +1,13 @@
 import {itineraryDefaults} from './itinerary.js';
 // 実旅程はユーザー承認によりクライアントに収録。表示上のネタバレ防止のみ。
 export const labels={hp:'HP',mp:'MP',hunger:'空腹度',joy:'幸福度'};
-export const initial={bride:{hp:[30,100],mp:[20,80],hunger:[40,100],joy:[100,100]},groom:{hp:[40,100],mp:[30,80],hunger:[40,100],joy:[100,100]}};
+export const initial={bride:{hp:[20,100],mp:[10,80],hunger:[40,100],joy:[20,100]},groom:{hp:[25,100],mp:[15,80],hunger:[40,100],joy:[20,100]}};
 export const items=['スマートフォン','充電器','モバイルバッテリー','財布','身分証','乗車券','防寒着','厚手の靴下','歩きやすい靴','手袋','マフラー','折りたたみ傘','常備薬','スキンケア用品'];
-export const effects=[{id:'bath',name:'温泉に入った',icon:'♨',max:{hp:10},current:{hp:20}},{id:'meal',name:'おいしいご飯を食べた',icon:'♜',max:{hp:5},current:{hunger:-30}},{id:'view',name:'絶景を見た',icon:'✧',max:{mp:10},current:{joy:10}},{id:'rest',name:'ホテルでのんびりした',icon:'☕',max:{mp:5},current:{mp:20}},{id:'sleep',name:'ぐっすり眠った',icon:'☾',max:{hp:5},current:{hp:30}}];
+export const effects=[{id:'bath',name:'温泉に入った',icon:'♨',max:{hp:10},current:{joy:30}},{id:'meal',name:'おいしいご飯を食べた',icon:'♜',max:{hp:5},current:{hunger:-30,joy:30}},{id:'view',name:'絶景を見た',icon:'✧',max:{mp:10},current:{joy:10}},{id:'rest',name:'ホテルでのんびりした',icon:'☕',max:{mp:5},current:{joy:30}},{id:'sleep',name:'ぐっすり眠った',icon:'☾',max:{hp:5},current:{joy:30}}];
 export const dates=['2026-10-31','2026-11-01','2026-11-02'];
 export const themes=['冒険の始まり','天空の絶景を探せ！','冒険の終わり、そして帰還'];
 export const at=(day,time)=>`${dates[day-1]}T${time}:00+09:00`;
+export const tripStartAt=at(1,'10:00');
 export const actions=[];
 export const quests=[];
 const baseActions=itineraryDefaults.actions;
@@ -42,19 +43,20 @@ export const locations=[
  {names:['清里駅'],actionId:'a2-1'},{names:['サンメドウズ清里','清里テラス','サンダンス','センターハウス'],actionId:'a2-3'},
  {names:['清泉寮'],actionId:'a2-6'},{names:['まきば公園'],actionId:'a2-11'}
 ];
-// Per-instance rewards: early recovery -> middle growth -> late breakthrough.
+// HP/MP: maximum growth only. Joy: current + capacity grow together.
+// All eleven instances add 980 joy; a new journey starts at 20 and reaches 1,000.
 export const growthRewards={
- 'd1-rest':{max:{hp:25,mp:25},current:{hp:20,mp:50}},
- 'd1-meal':{max:{hp:25,joy:30},current:{hp:35,hunger:-40,joy:30}},
- 'd1-bath':{max:{hp:30},current:{hp:70,mp:20}},
- 'd1-sleep':{max:{hp:50,mp:40},current:{hp:100,mp:80}},
- 'd2-view':{max:{mp:80,joy:60},current:{mp:90,joy:60}},
- 'd2-snack':{max:{hp:25,joy:40},current:{hp:40,hunger:-35,joy:40}},
- 'd2-rest':{max:{mp:60},current:{mp:120}},
- 'd2-meal':{max:{hp:50,joy:60},current:{hp:80,hunger:-50,joy:60}},
- 'd2-bath':{max:{hp:100,mp:20},current:{hp:180,mp:50}},
- 'd3-meal':{max:{hp:25,joy:80},current:{hp:60,hunger:-50,joy:80}},
- 'd3-rest':{max:{mp:100,joy:40},current:{mp:200,joy:40}}
+ 'd1-rest':{max:{hp:25,mp:25,joy:60},current:{joy:60}},
+ 'd1-meal':{max:{hp:25,joy:80},current:{hunger:-40,joy:80}},
+ 'd1-bath':{max:{hp:30,joy:90},current:{joy:90}},
+ 'd1-sleep':{max:{hp:50,mp:40,joy:70},current:{joy:70}},
+ 'd2-view':{max:{mp:80,joy:180},current:{joy:180}},
+ 'd2-snack':{max:{hp:25,joy:70},current:{hunger:-35,joy:70}},
+ 'd2-rest':{max:{mp:60,joy:80},current:{joy:80}},
+ 'd2-meal':{max:{hp:50,joy:100},current:{hunger:-50,joy:100}},
+ 'd2-bath':{max:{hp:100,mp:20,joy:110},current:{joy:110}},
+ 'd3-meal':{max:{hp:25,joy:60},current:{hunger:-50,joy:60}},
+ 'd3-rest':{max:{mp:100,joy:80},current:{joy:80}}
 };
 export function eventEffect(event){return {...effects.find(e=>e.id===event.effect),...growthRewards[event.id],...(event.id==='d3-meal'?{name:'ホテルで朝食を食べた'}:event.id==='d3-rest'?{name:'ホテルでゆっくり過ごした'}:{})};}
 export const openingTiming={homecoming:5000,unlock:11000,end:15000};

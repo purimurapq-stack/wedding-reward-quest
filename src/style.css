@@ -26,3 +26,4 @@
 .home-landscape .sprite{max-height:130px}.scene-hotelNight,.scene-starlight{background:#172641}.scene-homeward,.scene-ending{background:#e2b5a0}
 .hero .message-label{display:block;line-height:1.7;overflow-wrap:anywhere}.hero .message p{line-height:1.9}
 @keyframes home-scenery-fade{from{opacity:.35}to{opacity:1}}
+.growth-joy{color:#ffda9c;font-weight:700;text-align:center;font-size:18px}.game-dialog fieldset{min-inline-size:0;border:2px solid #8d8367;margin:16px 0;padding:12px}.game-dialog legend{padding:0 8px;color:#ffe79b}
